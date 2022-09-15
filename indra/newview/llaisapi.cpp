@@ -479,7 +479,7 @@ void AISAPI::InvokeAISCommandCoro(LLCoreHttpUtil::HttpCoroutineAdapter::ptr_t ht
         {
             if (body["oversize_inventory"].asBoolean() == true)
             {
-                LL_WARNS("Inventory") << "Can't fetch the oversized inventory folder" << LL_ENDL;
+                LL_WARNS("Inventory") << "Can't fetch the oversized inventory folder (v3)" << LL_ENDL;
                 LLNotificationsUtil::add("InventoryOversize");
             }
         }

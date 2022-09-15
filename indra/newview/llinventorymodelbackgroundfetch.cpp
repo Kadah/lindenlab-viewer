@@ -89,6 +89,7 @@
 namespace
 {
 
+bool oversizeNotificationShown = false;
 ///----------------------------------------------------------------------------
 /// Class <anonymous>::BGItemHttpHandler
 ///----------------------------------------------------------------------------
@@ -583,6 +584,29 @@ bool LLInventoryModelBackgroundFetch::fetchQueueContainsNoDescendentsOf(const LL
 	return true;
 }
 
+bool LLInventoryModelBackgroundFetch::removeFromQueue(const LLUUID cat_id)
+{
+    for (fetch_queue_t::const_iterator it = mFetchQueue.begin();
+        it != mFetchQueue.end();
+        ++it)
+    {
+
+        if (cat_id == (*it).mUUID)
+        {
+            LL_WARNS() << "queue size 0: " << mFetchQueue.size() << LL_ENDL;
+            mFetchQueue.erase(it);
+            LL_WARNS() << "queue size 1: " << mFetchQueue.size() << LL_ENDL;
+            return true;
+        }
+    }
+    return false;
+}
+
+void LLInventoryModelBackgroundFetch::emptyQueue()
+{
+    mFetchQueue.erase(mFetchQueue.begin(), mFetchQueue.end());
+}
+
 
 namespace
 {
@@ -827,11 +851,23 @@ void BGFolderHttpHandler::processFailure(LLCore::HttpStatus status, LLCore::Http
             //&& body_llsd.has("oversize_categories")
             )
         {
-            LL_WARNS(LOG_INV) << "Can't fetch the oversized inventory folder" << LL_ENDL;
-            LLNotificationsUtil::add("InventoryOversize");
+            LL_WARNS(LOG_INV) << "Can't fetch the oversized inventory folder (v2)" << LL_ENDL;
+            if (!oversizeNotificationShown)
+            {
+                LLNotificationsUtil::add("InventoryOversize");
+                oversizeNotificationShown = true;
+            }
 
-            //stop fetching the inventory
-            fetcher->setAllFoldersFetched();
+            for (LLSD::array_const_iterator cat_it = body_llsd["oversize_categories"].beginArray();
+                cat_it != body_llsd["oversize_categories"].endArray();
+                ++cat_it)
+            {
+                LLSD cat_sd(*cat_it);
+                fetcher->removeFromQueue(cat_sd.asUUID());
+            }
+
+            fetcher->emptyQueue(); // !!!!!
+            fetcher->setAllFoldersFetched(); // no "oversize_categories"
         }
         else if (fetcher->isBulkFetchProcessingComplete())
         {

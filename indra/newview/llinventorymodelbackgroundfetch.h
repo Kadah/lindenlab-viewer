@@ -71,6 +71,9 @@ public:
 	void addRequestAtFront(const LLUUID & id, BOOL recursive, bool is_category);
 	void addRequestAtBack(const LLUUID & id, BOOL recursive, bool is_category);
 
+    bool removeFromQueue(const LLUUID cat_id);
+    void emptyQueue();
+
 protected:
 	void bulkFetch();
 
