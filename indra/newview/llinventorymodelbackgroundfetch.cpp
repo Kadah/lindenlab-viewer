@@ -593,9 +593,7 @@ bool LLInventoryModelBackgroundFetch::removeFromQueue(const LLUUID cat_id)
 
         if (cat_id == (*it).mUUID)
         {
-            LL_WARNS() << "queue size 0: " << mFetchQueue.size() << LL_ENDL;
             mFetchQueue.erase(it);
-            LL_WARNS() << "queue size 1: " << mFetchQueue.size() << LL_ENDL;
             return true;
         }
     }
@@ -848,7 +846,6 @@ void BGFolderHttpHandler::processFailure(LLCore::HttpStatus status, LLCore::Http
         if (status == LLCore::HttpStatus(403)
             && LLCoreHttpUtil::responseToLLSD(response, false, body_llsd)
             && body_llsd["oversize_inventory"].asBoolean() == true
-            //&& body_llsd.has("oversize_categories")
             )
         {
             LL_WARNS(LOG_INV) << "Can't fetch the oversized inventory folder (v2)" << LL_ENDL;
@@ -858,16 +855,23 @@ void BGFolderHttpHandler::processFailure(LLCore::HttpStatus status, LLCore::Http
                 oversizeNotificationShown = true;
             }
 
-            for (LLSD::array_const_iterator cat_it = body_llsd["oversize_categories"].beginArray();
-                cat_it != body_llsd["oversize_categories"].endArray();
-                ++cat_it)
+            if (body_llsd.has("oversize_categories"))
             {
-                LLSD cat_sd(*cat_it);
-                fetcher->removeFromQueue(cat_sd.asUUID());
+                for (LLSD::array_const_iterator cat_it = body_llsd["oversize_categories"].beginArray();
+                    cat_it != body_llsd["oversize_categories"].endArray();
+                    ++cat_it)
+                {
+                    LLSD cat_sd(*cat_it);
+                    LL_WARNS(LOG_INV) << "Removing from the fetch queue: " << cat_sd.asString() << LL_ENDL;
+                    fetcher->removeFromQueue(cat_sd.asUUID());
+                }
             }
-
-            fetcher->emptyQueue(); // !!!!!
-            fetcher->setAllFoldersFetched(); // no "oversize_categories"
+            else // TODO: penalty box
+            {
+                fetcher->emptyQueue();
+                fetcher->setAllFoldersFetched();
+            }
+            
         }
         else if (fetcher->isBulkFetchProcessingComplete())
         {
