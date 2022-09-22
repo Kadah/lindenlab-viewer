@@ -192,7 +192,8 @@ LLInventoryModelBackgroundFetch::LLInventoryModelBackgroundFetch():
 	mAllFoldersFetched(FALSE),
 	mRecursiveInventoryFetchStarted(FALSE),
 	mRecursiveLibraryFetchStarted(FALSE),
-	mMinTimeBetweenFetches(0.3f)
+	mMinTimeBetweenFetches(0.3f),
+    mPenaltyBox(false)
 {}
 
 LLInventoryModelBackgroundFetch::~LLInventoryModelBackgroundFetch()
@@ -369,6 +370,11 @@ void LLInventoryModelBackgroundFetch::bulkFetch()
 	{
 		return;
 	}
+
+    if (mPenaltyBox)
+    {
+        return;
+    }
 
 	// *TODO:  These values could be tweaked at runtime to effect
 	// a fast/slow fetch throttle.  Once login is complete and the scene
@@ -605,6 +611,10 @@ void LLInventoryModelBackgroundFetch::emptyQueue()
     mFetchQueue.erase(mFetchQueue.begin(), mFetchQueue.end());
 }
 
+void LLInventoryModelBackgroundFetch::setPenaltyBox(bool penalty_box)
+{
+    mPenaltyBox = penalty_box;
+}
 
 namespace
 {
@@ -868,6 +878,8 @@ void BGFolderHttpHandler::processFailure(LLCore::HttpStatus status, LLCore::Http
             }
             else // TODO: penalty box
             {
+                LL_WARNS_ONCE(LOG_INV) << "AIS penalty box had been hit" << LL_ENDL;
+                fetcher->setPenaltyBox(true);
                 fetcher->emptyQueue();
                 fetcher->setAllFoldersFetched();
             }

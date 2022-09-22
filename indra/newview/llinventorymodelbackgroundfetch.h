@@ -73,6 +73,7 @@ public:
 
     bool removeFromQueue(const LLUUID cat_id);
     void emptyQueue();
+    void setPenaltyBox(bool penalty_box);
 
 protected:
 	void bulkFetch();
@@ -108,6 +109,8 @@ private:
 	};
 	typedef std::deque<FetchQueueInfo> fetch_queue_t;
 	fetch_queue_t mFetchQueue;
+
+    bool mPenaltyBox;
 };
 
 #endif // LL_LLINVENTORYMODELBACKGROUNDFETCH_H
