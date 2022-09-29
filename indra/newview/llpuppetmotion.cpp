@@ -742,11 +742,153 @@ void LLPuppetMotion::rememberPosedJoint(S16 joint_id, LLPointer<LLJointState> jo
     }
 }
 
+void LLPuppetMotion::disableChildIKTargets(LLIK::Solver::target_map_t& targets, LLPuppetEvent& broadcast_event)
+{
+    //Go through the list of targets and see if they or any of their ancestors are marked as disabled IK.
+    //If an ancestor is disabled, disable this joint as well
+    //Make sure the broadcast message targets are all disabled so we don't have to do this on remote viewers.
+
+    //Check all the targets to see if they have ancestors with IK disabled
+    for  (LLIK::Solver::target_map_t::iterator iter = targets.begin();iter != targets.end();++iter)
+    {
+        S16 target_joint_id = iter->first;
+        
+        if (iter->second.hasDisabledIK())
+        {
+            broadcast_event.disableJointIK(target_joint_id);
+            continue;
+        }
+
+        state_map_t::iterator state_iter = mJointStates.find(target_joint_id);
+        
+        while (state_iter != mJointStates.end())
+        {
+            LLPointer<LLJointState> joint_state = state_iter->second;
+            
+            if (joint_state->getJoint()->getParent() != NULL)
+            {
+                S16 joint_id = joint_state->getJoint()->getParent()->getJointNum();
+                state_iter = mJointStates.find(joint_id);
+                
+                if (state_iter != mJointStates.end())
+                {
+                    LLIK::Solver::target_map_t::iterator ancestor = targets.find(joint_id);
+                    
+                    if (ancestor != targets.end() && ancestor->second.hasDisabledIK())
+                    {
+                        iter->second.disableIK();   //If an ancestor is out, so are we.
+                        broadcast_event.disableJointIK(target_joint_id);
+                        break;
+                    }
+                }
+            }
+        }
+    }
+}
+
+void LLPuppetMotion::applyIKDisabledTargets(LLIK::Solver::target_map_t& targets, Timestamp now)
+{
+    if (targets.size() == 0) return;
+    
+    //Joints with IK disabled, disable all joints below them in the skeletal hierarchy
+    //the positions and rotations that were recorded for them are asserted to be in the
+    //avatar root frame (the position and orientation of mPelvis) and scaled in the
+    //usual way.
+    
+    LLPointer<LLJointState> joint_state = mJointStates[0];  //Joint 0 is mPelvis
+        
+    for  (LLIK::Solver::target_map_t::iterator iter = targets.begin();iter != targets.end();++iter)
+    {
+        S16 joint_id = iter->first;
+        
+        state_map_t::iterator state_iter = mJointStates.find(joint_id);
+
+        if (state_iter == mJointStates.end())
+        {
+            continue;
+        }
+        
+        joint_state = state_iter->second;
+
+        if (iter->second.hasWorldPos() && joint_id == 0)
+        {
+            //NOTE: Position applied to the pelvis whether ik or no_ik
+            //is handled here with no_ik.  The pelvis is translated
+            //after IK is handled.
+            
+            //Position is ignored for no_ik joints.
+            joint_state->setUsage ( joint_state->getUsage() | LLJointState::POS );
+            //Position is already scaled by arm span.
+            //Position and rotation are relative the initial state of the pose
+            //and require no additional manipulation.
+            joint_state->setPosition(iter->second.getPos());
+        }
+        
+        //World and local rot are mutually exclusive.
+        if (iter->second.hasWorldRot() && joint_id != 0)
+        {
+            //World rotation here is defined as within the frame of the root (mPelvis) joint
+            //joint states take a parent relative rotation, so we must traverse the parents
+            //and extract them from the rotation to find the root-relative rotation.
+            LLQuaternion combined_rot = LLQuaternion::DEFAULT;
+            
+            if (joint_state->getJoint()->getParent() == NULL)
+            {
+                continue;
+            }
+            
+            state_map_t::iterator parent_state_iter = mJointStates.find(joint_state->getJoint()->getParent()->getJointNum());
+            
+            while (parent_state_iter != mJointStates.end() )
+            {
+                LLPointer<LLJointState> parent_state = parent_state_iter->second;
+                
+                combined_rot = combined_rot * parent_state->getRotation();
+                
+                if (parent_state->getJoint()->getParent() == NULL)
+                {
+                    parent_state_iter = mJointStates.end();
+                }
+                else
+                {
+                    parent_state_iter = mJointStates.find(parent_state->getJoint()->getParent()->getJointNum());
+                }
+            }
+            
+            joint_state->setRotation( ~combined_rot * iter->second.getRot() );
+        }
+        else if (iter->second.hasRot() && joint_id != 0)
+        {
+            joint_state->setRotation( iter->second.getRot() );
+        }
+        rememberPosedJoint(joint_id, joint_state, now);
+    }
+}
+
 void LLPuppetMotion::solveForTargetsAndHarvestResults(LLIK::Solver::target_map_t& targets, Timestamp now)
 {
+    LLIK::Solver::target_map_t noik_targets;
+    
+    //Remove the root joint (pelvis) and ik-disabled targets from the targets for IK.
+    for  (LLIK::Solver::target_map_t::iterator iter = targets.begin();iter != targets.end();)
+    {
+        S16 target_joint_id = iter->first;
+        if (iter->second.hasDisabledIK() || target_joint_id ==0)
+        {
+            noik_targets[target_joint_id] = iter->second;
+            LLIK::Solver::target_map_t::iterator oter = iter;
+            ++iter;
+            targets.erase(oter);
+        }
+        else
+        {
+            ++iter;
+        }
+    }
+    
     mIKSolver.solveForTargets(targets);
 
-    // copy results
+    // copy IK results
     const LLIK::Solver::S16_vec_t& active_ids = mIKSolver.getActiveIDs();
     for (S16 id : active_ids)
     {
@@ -754,6 +896,8 @@ void LLPuppetMotion::solveForTargetsAndHarvestResults(LLIK::Solver::target_map_t
         joint_state->setRotation(mIKSolver.getJointLocalRot(id));
         rememberPosedJoint(id, joint_state, now);
     }
+    // handle no-ik joints and pelvis positioning
+    applyIKDisabledTargets(noik_targets, now);
 }
 
 void LLPuppetMotion::applyEvent(const LLPuppetJointEvent& event, U64 now, LLIK::Solver::target_map_t& targets)
@@ -780,6 +924,11 @@ void LLPuppetMotion::applyEvent(const LLPuppetJointEvent& event, U64 now, LLIK::
             target.disableConstraint();
             something_changed = true;
         }
+        if (event.hasDisabledIK())
+        {
+            target.disableIK();
+            something_changed = true;
+        }
         if (something_changed)
         {
             targets[joint_id] = target;
@@ -793,6 +942,7 @@ void LLPuppetMotion::updateFromExpression(Timestamp now)
     {
         bool local_puppetry = !LLPuppetModule::instance().getEcho();
         bool something_changed = false;
+        bool disabled_ik = false;
 
         LLIK::Solver::target_map_t targets;
         LLPuppetEvent broadcast_event;
@@ -810,9 +960,25 @@ void LLPuppetMotion::updateFromExpression(Timestamp now)
             {
                 applyEvent(event, now, targets);
             }
+            
+            if (event.hasDisabledIK())
+            {
+                disabled_ik = true;
+            }
+            
             broadcast_event.addJointEvent(event);
+            
             something_changed = true;
         }
+        
+        if (local_puppetry && disabled_ik)
+        {
+            //At least one joint was marked with DisableIK for the sending agent
+            //Now we must go through the broadcast events and mark all their
+            //descendants accordingly as well as reduce the list of IK targets.
+            disableChildIKTargets(targets, broadcast_event);
+        }
+
         if (something_changed && LLPuppetModule::instance().isSending())
         {
             broadcast_event.updateTimestamp();

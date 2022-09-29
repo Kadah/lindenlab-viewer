@@ -90,6 +90,9 @@ public:
 
     void disableConstraint() { mMask |= DISABLE_CONSTRAINT; }
     bool hasDisabledConstraint() const { return (mMask & DISABLE_CONSTRAINT) > 0; }
+
+    void disableIK() { mMask |= DISABLE_IK; }
+    bool hasDisabledIK() const { return (mMask & DISABLE_IK) > 0; }
 private:
     LLVector3 mPos;
     LLQuaternion mRot;
@@ -100,6 +103,7 @@ private:
         HAS_ROT = 1 << 1,
         POS_IS_LOCAL = 1 << 2, // not yet used
         ROT_IS_LOCAL = 1 << 3,
+        DISABLE_IK = 1 << 5,
         DISABLE_CONSTRAINT = 1 << 6,
         HAS_DELEGATED = 1 << 7 // EXPERIMENTAL
     };

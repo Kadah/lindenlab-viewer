@@ -140,6 +140,10 @@ void processLeapData(const LLSD& data)
                 {
                     joint_event.disableConstraint();
                 }
+                else if (param_name == "no_ik" && value.asBoolean())
+                {
+                    joint_event.disableIK();  //Disable from IK processing.
+                }
                 continue;
             }
             v.mV[VX] = value.get(0).asReal();

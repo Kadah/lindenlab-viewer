@@ -174,6 +174,8 @@ private:
     void applyEvent(const LLPuppetJointEvent& event, U64 now, LLIK::Solver::target_map_t& targets);
     void packEvents();
     void pumpOutgoingEvents();
+    void applyIKDisabledTargets(LLIK::Solver::target_map_t& targets, Timestamp now);
+    void disableChildIKTargets(LLIK::Solver::target_map_t& targets, LLPuppetEvent& broadcast_event);
     void solveForTargetsAndHarvestResults(LLIK::Solver::target_map_t& targets, Timestamp now);
     void updateFromExpression(Timestamp now);
     void updateFromBroadcast(Timestamp now);

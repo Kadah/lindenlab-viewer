@@ -50,6 +50,7 @@ public:
         EF_ROTATION = 1 << 2,
         EF_ROTATION_IN_PARENT_FRAME = 1 << 3, // unset-->ROOT_FRAME, set-->PARENT_FRAME
         EF_SCALE = 1 << 4,
+        EF_DISABLE_IK = 1 << 5,
         EF_DISABLE_CONSTRAINT = 1 << 7
     };
 
@@ -67,6 +68,7 @@ public:
     void setScale(const LLVector3& scale);
     void setJointID(S32 id);
     void disableConstraint() { mMask |= EF_DISABLE_CONSTRAINT; }
+    void disableIK() { mMask |= EF_DISABLE_IK; }
 
     S16 getJointID() const { return mJointID; }
     LLQuaternion getRotation() const { return mRotation; }
@@ -79,11 +81,12 @@ public:
 
     void interpolate(F32 del, const LLPuppetJointEvent& A, const LLPuppetJointEvent& B);
 
-    bool isEmpty() const { return (mMask & (EF_ROTATION | EF_POSITION | EF_SCALE | EF_DISABLE_CONSTRAINT)) == 0; }
+    bool isEmpty() const { return (mMask & (EF_ROTATION | EF_POSITION | EF_SCALE | EF_DISABLE_CONSTRAINT | EF_DISABLE_IK)) == 0; }
     bool hasRotation() const { return (mMask & EF_ROTATION) > 0; }
     bool hasPosition() const { return (mMask & EF_POSITION) > 0; }
     bool hasScale() const { return (mMask & EF_SCALE) > 0; }
     bool hasDisabledConstraint() const { return (mMask & EF_DISABLE_CONSTRAINT) > 0; }
+    bool hasDisabledIK() const { return (mMask & EF_DISABLE_IK) > 0; }
 
     bool rotationIsParentLocal() const { return (mMask & EF_ROTATION_IN_PARENT_FRAME) > 0; }
 
@@ -110,6 +113,8 @@ public:
 public:
     LLPuppetEvent() {}
     void addJointEvent(const LLPuppetJointEvent& joint_event);
+    void disableJointIK(const S16 joint_id);
+
     bool pack(LLDataPackerBinaryBuffer& buffer);
     bool unpack(LLDataPackerBinaryBuffer& mesgsys);
 

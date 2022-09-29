@@ -284,6 +284,19 @@ void LLPuppetEvent::addJointEvent(const LLPuppetJointEvent& joint_event)
     mJointEvents.push_back(joint_event);
 }
 
+void LLPuppetEvent::disableJointIK(const S16 joint_id)
+{
+    //Used for broadcast messages, update the joint events which have disabled IK.
+    //Not a very efficient solution.
+    for(joint_deq_t::iterator iter=mJointEvents.begin(); iter != mJointEvents.end(); ++iter)
+    {
+        if ( iter->getJointID() == joint_id )
+        {
+            iter->disableIK();
+        }
+    }
+}
+
 bool  LLPuppetEvent::pack(LLDataPackerBinaryBuffer& buffer)
 {
     //A PuppetEvent contains a timestamp and one or more joints with one or more actions applied to it.
