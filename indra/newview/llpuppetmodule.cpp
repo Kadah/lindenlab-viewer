@@ -190,6 +190,10 @@ void processLeapData(const LLSD& data)
         }
         if (!joint_event.isEmpty())
         {
+            if (!motion->isActive())
+            {
+                gAgentAvatarp->startMotion(ANIM_AGENT_PUPPET_MOTION);
+            }
             std::static_pointer_cast<LLPuppetMotion>(motion)->addExpressionEvent(joint_event);
         }
     }
@@ -227,7 +231,7 @@ LLPuppetModule::LLPuppetModule() :
     add("send_skeleton",
         "Request skeleton data: returns dict",
         &LLPuppetModule::send_skeleton);
-    
+
     mPlugin = LLEventPumps::instance().obtain("SkeletonUpdate").listen(
                     "LLPuppetModule",
                     [](const LLSD& unused)
@@ -235,7 +239,6 @@ LLPuppetModule::LLPuppetModule() :
                         LLPuppetModule::instance().send_skeleton();
                         return false;
                     });
-    
 }
 
 
@@ -243,6 +246,9 @@ void LLPuppetModule::setLeapModule(std::weak_ptr<LLLeap> mod, const std::string 
 {
     mLeapModule = mod;
     mModuleName = module_name;
+    mActiveJoints.clear();      // Make sure data is cleared
+    if (gAgentAvatarp->getPuppetMotion())
+        gAgentAvatarp->getPuppetMotion()->clearAll();
 };
 
 
@@ -281,11 +287,15 @@ void LLPuppetModule::enableHeadMotion() const
 
 void LLPuppetModule::clearLeapModule()
 {
-    LL_INFOS("Puppet") << "Sending 'stop' command to Leap module" << LL_ENDL;
-    sendCommand("stop");
-    enableHeadMotion();
-    mActiveJoints.clear();
-    //mLeapModule.reset();
+    if (isAgentAvatarValid())
+    {
+        LL_INFOS("Puppet") << "Sending 'stop' command to Leap module" << LL_ENDL;
+        sendCommand("stop");
+        enableHeadMotion();
+        mActiveJoints.clear();
+        bool immediate = false;
+        gAgentAvatarp->stopMotion(ANIM_AGENT_PUPPET_MOTION, immediate);
+    }
 }
 
 void LLPuppetModule::sendCommand(const std::string& command, const LLSD& args) const

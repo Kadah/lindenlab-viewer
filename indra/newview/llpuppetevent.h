@@ -76,7 +76,7 @@ public:
     LLVector3 getScale() const { return mScale; }
 
     size_t getSize() const;
-    size_t pack(U8* wptr) const;
+    size_t pack(U8* wptr);     // non-const:  will quantize values
     size_t unpack(U8* wptr);
 
     void interpolate(F32 del, const LLPuppetJointEvent& A, const LLPuppetJointEvent& B);
@@ -115,7 +115,7 @@ public:
     void addJointEvent(const LLPuppetJointEvent& joint_event);
     void disableJointIK(const S16 joint_id);
 
-    bool pack(LLDataPackerBinaryBuffer& buffer);
+    bool pack(LLDataPackerBinaryBuffer& buffer, S32& out_num_joints);
     bool unpack(LLDataPackerBinaryBuffer& mesgsys);
 
     // for outbound LLPuppetEvents
