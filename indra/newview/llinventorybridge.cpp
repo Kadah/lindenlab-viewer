@@ -4289,6 +4289,7 @@ void LLFolderBridge::buildContextMenuFolderOptions(U32 flags,   menuentry_vec_t&
 	if (!is_system_folder && is_agent_inventory)
 	{
 		LLIsType is_callingcard(LLAssetType::AT_CALLINGCARD);
+        LLIsType is_clothing(LLAssetType::AT_CLOTHING);
 		if (mCallingCards || checkFolderForContentsOfType(model, is_callingcard))
 		{
 			items.push_back(std::string("Calling Card Separator"));
@@ -4296,7 +4297,7 @@ void LLFolderBridge::buildContextMenuFolderOptions(U32 flags,   menuentry_vec_t&
 			items.push_back(std::string("IM All Contacts In Folder"));
 		}
 
-        if (((flags & ITEM_IN_MULTI_SELECTION) == 0) && hasChildren())
+        if (((flags & ITEM_IN_MULTI_SELECTION) == 0) && hasChildren() && !checkFolderForContentsOfType(model, is_clothing))
         {
             items.push_back(std::string("Ungroup folder items"));
         }
