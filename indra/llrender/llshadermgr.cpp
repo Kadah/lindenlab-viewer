@@ -222,6 +222,14 @@ BOOL LLShaderMgr::attachShaderFeatures(LLGLSLShader * shader)
 		}
 	}
 
+	if (features->hasScreenSpaceReflections)
+	{
+        if (!shader->attachFragmentObject("deferred/screenSpaceReflUtil.glsl"))
+        {
+            return FALSE;
+        }
+	}
+
     if (features->hasShadows)
 	{
         if (!shader->attachFragmentObject("deferred/shadowUtil.glsl"))

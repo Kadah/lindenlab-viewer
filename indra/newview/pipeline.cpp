@@ -216,6 +216,7 @@ bool LLPipeline::CameraOffset;
 F32 LLPipeline::CameraMaxCoF;
 F32 LLPipeline::CameraDoFResScale;
 F32 LLPipeline::RenderAutoHideSurfaceAreaLimit;
+bool LLPipeline::RenderScreenSpaceReflections;
 LLTrace::EventStatHandle<S64> LLPipeline::sStatBatchSize("renderbatchsize");
 
 const F32 BACKLIGHT_DAY_MAGNITUDE_OBJECT = 0.1f;
@@ -583,6 +584,7 @@ void LLPipeline::init()
 	connectRefreshCachedSettingsSafe("CameraMaxCoF");
 	connectRefreshCachedSettingsSafe("CameraDoFResScale");
 	connectRefreshCachedSettingsSafe("RenderAutoHideSurfaceAreaLimit");
+    connectRefreshCachedSettingsSafe("RenderScreenSpaceReflections");
 	gSavedSettings.getControl("RenderAutoHideSurfaceAreaLimit")->getCommitSignal()->connect(boost::bind(&LLPipeline::refreshCachedSettings));
 }
 
@@ -1085,6 +1087,7 @@ void LLPipeline::refreshCachedSettings()
 	CameraMaxCoF = gSavedSettings.getF32("CameraMaxCoF");
 	CameraDoFResScale = gSavedSettings.getF32("CameraDoFResScale");
 	RenderAutoHideSurfaceAreaLimit = gSavedSettings.getF32("RenderAutoHideSurfaceAreaLimit");
+    RenderScreenSpaceReflections = gSavedSettings.getBOOL("RenderScreenSpaceReflections");
 	RenderSpotLight = nullptr;
 	updateRenderDeferred();
 
@@ -9047,6 +9050,40 @@ void LLPipeline::renderDeferredLighting()
                 gGL.matrixMode(LLRender::MM_MODELVIEW);
                 gGL.popMatrix();
             }
+        }
+
+		if (RenderScreenSpaceReflections)
+        {
+            LL_PROFILE_ZONE_NAMED_CATEGORY_PIPELINE("renderDeferredLighting - screen space reflections");
+            LL_PROFILE_GPU_ZONE("screen space reflections");
+
+            // Make sure the deferred VB is a full screen triangle.
+            mDeferredVB->getVertexStrider(vert);
+
+            vert[0].set(-1, 1, 0);
+            vert[1].set(-1, -3, 0);
+            vert[2].set(3, 1, 0);
+
+			// Make sure we have the correct matrix setup here.
+			gGL.pushMatrix();
+            gGL.loadIdentity();
+            gGL.matrixMode(LLRender::MM_PROJECTION);
+            gGL.pushMatrix();
+            gGL.loadIdentity();
+
+			bindDeferredShader(gPostScreenSpaceReflectionProgram);
+            mDeferredVB->setBuffer(LLVertexBuffer::MAP_VERTEX);
+
+            {
+                LLGLDisable   blend(GL_BLEND);
+                LLGLDepthTest depth(GL_TRUE, GL_FALSE, GL_ALWAYS);
+                stop_glerror();
+                mDeferredVB->drawArrays(LLRender::TRIANGLES, 0, 3);
+                stop_glerror();
+            }
+
+            unbindDeferredShader(gPostScreenSpaceReflectionProgram);
+
         }
 
         gGL.setColorMask(true, true);
