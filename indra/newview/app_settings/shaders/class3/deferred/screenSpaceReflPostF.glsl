@@ -34,12 +34,41 @@ out vec4 frag_color;
 #endif
 
 uniform vec2 screen_res;
+uniform mat4 projection_matrix;
+uniform mat4 inv_proj;
+uniform float zNear;
+uniform float zFar;
 
 VARYING vec2 vary_fragcoord;
 
-void main() {
-    vec2  tc = vary_fragcoord.xy;
+uniform sampler2DRect depthMap;
+uniform sampler2DRect normalMap;
+uniform sampler2DRect sceneMap;
+uniform sampler2DRect diffuseRect;
 
-    frag_color.rgb = vec3(1, 0, 1);
-    frag_color.a = 1;
+vec3 getNorm(vec2 screenpos);
+float getDepth(vec2 pos_screen);
+float linearDepth(float d, float znear, float zfar);
+vec4 getPositionWithDepth(vec2 pos_screen, float depth);
+vec4 getPosition(vec2 pos_screen);
+bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, mat4 proj, float zThickness, 
+                            float nearPlaneZ, float stride, float jitter, const float maxSteps, float maxDistance,
+                            out vec2 hitPixel, out vec3 hitPoint);
+
+void main() {
+    vec2  tc = vary_fragcoord.xy * screen_res;
+    vec3 pos = getPosition(tc).xyz;
+    vec3 viewPos = normalize(pos);
+    vec3 rayDirection = reflect(getNorm(tc), viewPos);
+    vec2 hitpixel;
+    vec3 hitpoint = viewPos;
+    bool hit = traceScreenSpaceRay1(pos, rayDirection, projection_matrix,1, zNear, 1, 4, 20, 5, hitpixel, hitpoint);
+    
+    if (hit) {
+        frag_color.rgb = vec3(hitpixel.x, hitpixel.y, 0);
+    } else {
+        frag_color.rgb = vec3(tc.x, tc.y, 0);
+    }
+
+    frag_color.a = 1.0;
 }

@@ -2888,6 +2888,7 @@ BOOL LLViewerShaderMgr::loadShadersDeferred()
         gPostScreenSpaceReflectionProgram.mShaderFiles.push_back(make_pair("deferred/screenSpaceReflPostV.glsl", GL_VERTEX_SHADER));
         gPostScreenSpaceReflectionProgram.mShaderFiles.push_back(make_pair("deferred/screenSpaceReflPostF.glsl", GL_FRAGMENT_SHADER));
         gPostScreenSpaceReflectionProgram.mFeatures.hasScreenSpaceReflections = true;
+        gPostScreenSpaceReflectionProgram.mFeatures.isDeferred                = true;
         gPostScreenSpaceReflectionProgram.mShaderLevel = 3;
         success = gPostScreenSpaceReflectionProgram.createShader(NULL, NULL);
 	}

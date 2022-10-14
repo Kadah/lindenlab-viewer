@@ -9071,8 +9071,20 @@ void LLPipeline::renderDeferredLighting()
             gGL.pushMatrix();
             gGL.loadIdentity();
 
-			bindDeferredShader(gPostScreenSpaceReflectionProgram);
+			bindDeferredShader(gPostScreenSpaceReflectionProgram, screen_target);
             mDeferredVB->setBuffer(LLVertexBuffer::MAP_VERTEX);
+
+			// Provide our projection matrix.
+            glh::matrix4f projection = get_current_projection();
+            gPostScreenSpaceReflectionProgram.uniformMatrix4fv(LLShaderMgr::PROJECTION_MATRIX, 1, FALSE, projection.m);
+
+			// We need linear depth.
+            static LLStaticHashedString zfar("zFar");
+            static LLStaticHashedString znear("zNear");
+            float                       nearClip = LLViewerCamera::getInstance()->getNear();
+            float                       farClip  = LLViewerCamera::getInstance()->getFar();
+            gPostScreenSpaceReflectionProgram.uniform1f(zfar, farClip);
+            gPostScreenSpaceReflectionProgram.uniform1f(znear, nearClip);
 
             {
                 LLGLDisable   blend(GL_BLEND);
@@ -9084,6 +9096,9 @@ void LLPipeline::renderDeferredLighting()
 
             unbindDeferredShader(gPostScreenSpaceReflectionProgram);
 
+            gGL.popMatrix();
+            gGL.matrixMode(LLRender::MM_MODELVIEW);
+            gGL.popMatrix();
         }
 
         gGL.setColorMask(true, true);

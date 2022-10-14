@@ -34,12 +34,23 @@ out vec4 frag_color;
 #endif
 
 uniform vec2 screen_res;
+uniform mat4 projection_matrix;
+uniform mat4 inv_proj;
+uniform float zNear;
+uniform float zFar;
 
 VARYING vec2 vary_fragcoord;
 
-void main() {
-    vec2  tc = vary_fragcoord.xy;
+uniform sampler2DRect depthMap;
+uniform sampler2DRect normalMap;
+uniform sampler2DRect sceneMap;
 
-    frag_color.rgb = vec3(1, 0, 1);
-    frag_color.a = 1;
+vec3 getNorm(vec2 screenpos);
+float getDepth(vec2 pos_screen);
+float linearDepth(float d, float znear, float zfar);
+
+void main() {
+    vec2  tc = vary_fragcoord.xy * screen_res;
+    vec4 pos = getPositionWithDepth(tc, getDepth(tc));
+    frag_color = pos;
 }
