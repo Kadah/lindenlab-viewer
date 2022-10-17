@@ -1235,6 +1235,7 @@ U32 LLViewerRegion::getNumOfVisibleGroups() const
 
 void LLViewerRegion::updateReflectionProbes()
 {
+#if 1
     const F32 probe_spacing = 32.f;
     const F32 probe_radius = sqrtf((probe_spacing * 0.5f) * (probe_spacing * 0.5f) * 3.f);
     const F32 hover_height = 2.f;
@@ -1270,6 +1271,7 @@ void LLViewerRegion::updateReflectionProbes()
             mReflectionMaps[idx]->mRadius = probe_radius;
         }
     }
+#endif
 }
 
 void LLViewerRegion::addToVOCacheTree(LLVOCacheEntry* entry)
@@ -3080,6 +3082,7 @@ void LLViewerRegionImpl::buildCapabilityNames(LLSD& capabilityNames)
 	capabilityNames.append("MapLayer");
 	capabilityNames.append("MapLayerGod");
 	capabilityNames.append("MeshUploadFlag");	
+	capabilityNames.append("ModifyMaterialParams");
 	capabilityNames.append("NavMeshGenerationStatus");
 	capabilityNames.append("NewFileAgentInventory");
 	capabilityNames.append("ObjectAnimation");

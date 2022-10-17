@@ -338,9 +338,6 @@ LLFrameTimer	gRestoreGLTimer;
 BOOL			gRestoreGL = FALSE;
 bool			gUseWireframe = FALSE;
 
-//use for remember deferred mode in wireframe switch
-bool			gInitialDeferredModeForWireframe = FALSE;
-
 LLMemoryInfo gSysMemory;
 U64Bytes gMemoryAllocated(0); // updated in display_stats() in llviewerdisplay.cpp
 
@@ -2189,6 +2186,19 @@ bool LLAppViewer::initThreads()
 	LLImage::initClass(gSavedSettings.getBOOL("TextureNewByteRange"),gSavedSettings.getS32("TextureReverseByteRange"));
 
 	LLLFSThread::initClass(enable_threads && true); // TODO: fix crashes associated with this shutdo
+
+    //auto configure thread count
+    LLSD threadCounts = gSavedSettings.getLLSD("ThreadPoolSizes");
+
+    // get the number of concurrent threads that can run
+    S32 cores = std::thread::hardware_concurrency();
+
+    // The only configurable thread count right now is ImageDecode
+    // The viewer typically starts around 8 threads not including image decode, 
+    // so try to leave at least one core free
+    S32 image_decode_count = llclamp(cores - 9, 1, 8);
+    threadCounts["ImageDecode"] = image_decode_count;
+    gSavedSettings.setLLSD("ThreadPoolSizes", threadCounts);
 
 	// Image decoding
 	LLAppViewer::sImageDecodeThread = new LLImageDecodeThread(enable_threads && true);

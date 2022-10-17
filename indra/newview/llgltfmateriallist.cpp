@@ -28,12 +28,35 @@
 #include "llgltfmateriallist.h"
 
 #include "llassetstorage.h"
+#include "lldispatcher.h"
 #include "llfilesystem.h"
 #include "llsdserialize.h"
 #include "lltinygltfhelper.h"
+#include "llviewergenericmessage.h"
 
 #include "tinygltf/tiny_gltf.h"
 #include <strstream>
+
+namespace
+{
+    class LLGLTFOverrideDispatchHandler : public LLDispatchHandler
+    {
+    public:
+        LLGLTFOverrideDispatchHandler() = default;
+        ~LLGLTFOverrideDispatchHandler() override = default;
+
+        bool operator()(const LLDispatcher* dispatcher, const std::string& key, const LLUUID& invoice, const sparam_t& strings) override
+        {
+            LL_DEBUGS() << "strings: ";
+            for (std::string const & s : strings) {
+                LL_CONT << " " << s;
+            }
+            LL_CONT << LL_ENDL;
+            return true;
+        }
+    };
+    LLGLTFOverrideDispatchHandler handle_gltf_override_message;
+}
 
 LLGLTFMaterialList gGLTFMaterialList;
 
@@ -83,18 +106,9 @@ LLGLTFMaterial* LLGLTFMaterialList::getMaterial(const LLUUID& id)
                             {
                                 std::string data = asset["data"];
 
-                                tinygltf::TinyGLTF gltf;
-                                tinygltf::TinyGLTF loader;
-                                std::string        error_msg;
-                                std::string        warn_msg;
+                                std::string warn_msg, error_msg;
 
-                                tinygltf::Model model_in;
-
-                                if (loader.LoadASCIIFromString(&model_in, &error_msg, &warn_msg, data.c_str(), data.length(), ""))
-                                {
-                                    LLTinyGLTFHelper::setFromModel(mat, model_in, 0);
-                                }
-                                else
+                                if (!mat->fromJSON(data, warn_msg, error_msg))
                                 {
                                     LL_WARNS() << "Failed to decode material asset: " << LL_ENDL;
                                     LL_WARNS() << warn_msg << LL_ENDL;
@@ -128,3 +142,8 @@ void LLGLTFMaterialList::removeMaterial(const LLUUID& id)
     mList.erase(id);
 }
 
+// static
+void LLGLTFMaterialList::registerCallbacks()
+{
+    gGenericDispatcher.addHandler("GLTF", &handle_gltf_override_message);
+}
