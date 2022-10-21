@@ -66,6 +66,7 @@
 
 #include <d3d9.h>
 #include <dxgi1_4.h>
+#include <timeapi.h>
 
 // Require DirectInput version 8
 #define DIRECTINPUT_VERSION 0x0800
@@ -903,21 +904,20 @@ void LLWindowWin32::close()
 	// Restore gamma to the system values.
 	restoreGamma();
 
-	if (mhDC)
-	{
-		if (!ReleaseDC(mWindowHandle, mhDC))
-		{
-			LL_WARNS("Window") << "Release of ghDC failed" << LL_ENDL;
-		}
-		mhDC = NULL;
-	}
-
 	LL_DEBUGS("Window") << "Destroying Window" << LL_ENDL;
 
     mWindowThread->post([=]()
         {
             if (IsWindow(mWindowHandle))
             {
+                if (mhDC)
+                {
+                    if (!ReleaseDC(mWindowHandle, mhDC))
+                    {
+                        LL_WARNS("Window") << "Release of ghDC failed!" << LL_ENDL;
+                    }
+                }
+
                 // Make sure we don't leave a blank toolbar button.
                 ShowWindow(mWindowHandle, SW_HIDE);
 
@@ -943,6 +943,7 @@ void LLWindowWin32::close()
     // Even though the above lambda might not yet have run, we've already
     // bound mWindowHandle into it by value, which should suffice for the
     // operations we're asking. That's the last time WE should touch it.
+    mhDC = NULL;
     mWindowHandle = NULL;
     mWindowThread->close();
 }
@@ -1535,12 +1536,10 @@ const	S32   max_format  = (S32)num_formats - 1;
 			{
 				wglDeleteContext (mhRC);							// Release The Rendering Context
 				mhRC = 0;										// Zero The Rendering Context
-
 			}
-			ReleaseDC (mWindowHandle, mhDC);						// Release The Device Context
-			mhDC = 0;											// Zero The Device Context
 		}
 
+        // will release and recreate mhDC, mWindowHandle
 		recreateWindow(window_rect, dw_ex_style, dw_style);
         
         RECT rect;
@@ -1690,7 +1689,8 @@ const	S32   max_format  = (S32)num_formats - 1;
 
 void LLWindowWin32::recreateWindow(RECT window_rect, DWORD dw_ex_style, DWORD dw_style)
 {
-    auto oldHandle = mWindowHandle;
+    auto oldWindowHandle = mWindowHandle;
+    auto oldDCHandle = mhDC;
 
     // zero out mWindowHandle and mhDC before destroying window so window
     // thread falls back to peekmessage
@@ -1702,7 +1702,8 @@ void LLWindowWin32::recreateWindow(RECT window_rect, DWORD dw_ex_style, DWORD dw
     auto window_work =
         [this,
          self=mWindowThread,
-         oldHandle,
+         oldWindowHandle,
+         oldDCHandle,
          // bind CreateWindowEx() parameters by value instead of
          // back-referencing LLWindowWin32 members
          windowClassName=mWindowClassName,
@@ -1718,11 +1719,20 @@ void LLWindowWin32::recreateWindow(RECT window_rect, DWORD dw_ex_style, DWORD dw
             self->mWindowHandle = 0;
             self->mhDC = 0;
 
-            // important to call DestroyWindow() from the window thread
-            if (oldHandle && !destroy_window_handler(oldHandle))
+            if (oldWindowHandle)
             {
-                LL_WARNS("Window") << "Failed to properly close window before recreating it!"
-                                   << LL_ENDL;
+                if (oldDCHandle && !ReleaseDC(oldWindowHandle, oldDCHandle))
+                {
+                    LL_WARNS("Window") << "Failed to ReleaseDC" << LL_ENDL;
+                }
+
+                // important to call DestroyWindow() from the window thread
+                if (!destroy_window_handler(oldWindowHandle))
+                {
+
+                    LL_WARNS("Window") << "Failed to properly close window before recreating it!"
+                        << LL_ENDL;
+                }
             }
 
             auto handle = CreateWindowEx(dw_ex_style,
@@ -1760,7 +1770,7 @@ void LLWindowWin32::recreateWindow(RECT window_rect, DWORD dw_ex_style, DWORD dw
         };
     // But how we pass window_work to the window thread depends on whether we
     // already have a window handle.
-    if (! oldHandle)
+    if (!oldWindowHandle)
     {
         // Pass window_work using the WorkQueue: without an existing window
         // handle, the window thread can't call GetMessage().
@@ -1773,7 +1783,7 @@ void LLWindowWin32::recreateWindow(RECT window_rect, DWORD dw_ex_style, DWORD dw
         // PostMessage(oldHandle) because oldHandle won't be destroyed until
         // the window thread has retrieved and executed window_work.
         LL_DEBUGS("Window") << "posting window_work to message queue" << LL_ENDL;
-        mWindowThread->Post(oldHandle, window_work);
+        mWindowThread->Post(oldWindowHandle, window_work);
     }
 
     auto future = promise.get_future();
@@ -4826,6 +4836,14 @@ void LLWindowWin32::LLWindowWin32Thread::run()
     LogChange logger("Window");
 
     initDX();
+
+    //as good a place as any to up the MM timer resolution (see ms_sleep)
+    //attempt to set timer resolution to 1ms
+    TIMECAPS tc;
+    if (timeGetDevCaps(&tc, sizeof(TIMECAPS)) == TIMERR_NOERROR)
+    {
+        timeBeginPeriod(llclamp((U32) 1, tc.wPeriodMin, tc.wPeriodMax));
+    }
 
     while (! getQueue().done())
     {

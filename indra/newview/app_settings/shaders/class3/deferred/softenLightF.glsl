@@ -37,19 +37,19 @@ out vec4 frag_color;
 #define frag_color gl_FragColor
 #endif
 
-uniform sampler2DRect diffuseRect;
-uniform sampler2DRect specularRect;
-uniform sampler2DRect normalMap;
-uniform sampler2DRect emissiveRect; // PBR linear packed Occlusion, Roughness, Metal. See: pbropaqueF.glsl
+uniform sampler2D diffuseRect;
+uniform sampler2D specularRect;
+uniform sampler2D normalMap;
+uniform sampler2D emissiveRect; // PBR linear packed Occlusion, Roughness, Metal. See: pbropaqueF.glsl
 uniform sampler2D altDiffuseMap; // PBR: irradiance, skins/default/textures/default_irradiance.png
 
 const float M_PI = 3.14159265;
 
 #if defined(HAS_SUN_SHADOW) || defined(HAS_SSAO)
-uniform sampler2DRect lightMap;
+uniform sampler2D lightMap;
 #endif
 
-uniform sampler2DRect depthMap;
+uniform sampler2D depthMap;
 uniform sampler2D     lightFunc;
 
 uniform float blur_size;
@@ -81,6 +81,7 @@ void sampleReflectionProbesLegacy(inout vec3 ambenv, inout vec3 glossenv, inout 
         vec3 pos, vec3 norm, float glossiness, float envIntensity);
 void applyGlossEnv(inout vec3 color, vec3 glossenv, vec4 spec, vec3 pos, vec3 norm);
 void applyLegacyEnv(inout vec3 color, vec3 legacyenv, vec4 spec, vec3 pos, vec3 norm, float envIntensity);
+float getDepth(vec2 pos_screen);
 
 vec3 linear_to_srgb(vec3 c);
 vec3 srgb_to_linear(vec3 c);
@@ -89,14 +90,23 @@ vec3 srgb_to_linear(vec3 c);
 vec4 applyWaterFogViewLinear(vec3 pos, vec4 color);
 #endif
 
-// PBR interface
-vec3 pbrIbl(vec3 diffuseColor,
-            vec3 specularColor,
-            vec3 radiance, // radiance map sample
-            vec3 irradiance, // irradiance map sample
-            float ao,       // ambient occlusion factor
-            float nv,       // normal dot view vector
-            float perceptualRoughness);
+void calcDiffuseSpecular(vec3 baseColor, float metallic, inout vec3 diffuseColor, inout vec3 specularColor);
+
+vec3 pbrBaseLight(vec3 diffuseColor,
+                  vec3 specularColor,
+                  float metallic,
+                  vec3 pos,
+                  vec3 norm,
+                  float perceptualRoughness,
+                  vec3 light_dir,
+                  vec3 sunlit,
+                  float scol,
+                  vec3 radiance,
+                  vec3 irradiance,
+                  vec3 colorEmissive,
+                  float ao,
+                  vec3 additive,
+                  vec3 atten);
 
 vec3 pbrPunctual(vec3 diffuseColor, vec3 specularColor, 
                     float perceptualRoughness, 
@@ -109,18 +119,18 @@ vec3 pbrPunctual(vec3 diffuseColor, vec3 specularColor,
 void main()
 {
     vec2  tc           = vary_fragcoord.xy;
-    float depth        = texture2DRect(depthMap, tc.xy).r;
+    float depth        = getDepth(tc.xy);
     vec4  pos          = getPositionWithDepth(tc, depth);
-    vec4  norm         = texture2DRect(normalMap, tc);
+    vec4  norm         = texture2D(normalMap, tc);
     float envIntensity = norm.z;
     norm.xyz           = getNorm(tc);
     vec3  light_dir   = (sun_up_factor == 1) ? sun_dir : moon_dir;
 
-    vec4 baseColor     = texture2DRect(diffuseRect, tc);
-    vec4 spec        = texture2DRect(specularRect, vary_fragcoord.xy); // NOTE: PBR linear Emissive
+    vec4 baseColor     = texture2D(diffuseRect, tc);
+    vec4 spec        = texture2D(specularRect, vary_fragcoord.xy); // NOTE: PBR linear Emissive
 
 #if defined(HAS_SUN_SHADOW) || defined(HAS_SSAO)
-    vec2 scol_ambocc = texture2DRect(lightMap, vary_fragcoord.xy).rg;
+    vec2 scol_ambocc = texture2D(lightMap, vary_fragcoord.xy).rg;
 #endif
 
 #if defined(HAS_SUN_SHADOW)
@@ -146,12 +156,12 @@ void main()
 
     if (GET_GBUFFER_FLAG(GBUFFER_FLAG_HAS_PBR))
     {
-        vec3 orm = texture2DRect(specularRect, tc).rgb; 
+        vec3 orm = texture2D(specularRect, tc).rgb; 
         float perceptualRoughness = orm.g;
         float metallic = orm.b;
         float ao = orm.r * ambocc;
 
-        vec3 colorEmissive = texture2DRect(emissiveRect, tc).rgb;
+        vec3 colorEmissive = texture2D(emissiveRect, tc).rgb;
 
         // PBR IBL
         float gloss      = 1.0 - perceptualRoughness;
@@ -160,25 +170,15 @@ void main()
         sampleReflectionProbes(irradiance, radiance, pos.xyz, norm.xyz, gloss);
         
         // Take maximium of legacy ambient vs irradiance sample as irradiance
-        // NOTE: ao is applied in pbrIbl, do not apply here
+        // NOTE: ao is applied in pbrIbl (see pbrBaseLight), do not apply here
         irradiance       = max(amblit,irradiance);
 
-        vec3 f0 = vec3(0.04);
-        vec3 diffuseColor = baseColor.rgb*(vec3(1.0)-f0);
-        diffuseColor *= 1.0 - metallic;
-
-        vec3 specularColor = mix(f0, baseColor.rgb, metallic);
+        vec3 diffuseColor;
+        vec3 specularColor;
+        calcDiffuseSpecular(baseColor.rgb, metallic, diffuseColor, specularColor);
 
         vec3 v = -normalize(pos.xyz);
-        float NdotV = clamp(abs(dot(norm.xyz, v)), 0.001, 1.0);
-        
-        color.rgb += pbrPunctual(diffuseColor, specularColor, perceptualRoughness, metallic, norm.xyz, v, normalize(light_dir)) * sunlit * 2.75 * scol;
-        color.rgb += colorEmissive*0.5;
-        
-        color.rgb += pbrIbl(diffuseColor, specularColor, radiance, irradiance, ao, NdotV, perceptualRoughness);
-
-        color = atmosFragLightingLinear(color, additive, atten);
-        color  = scaleSoftClipFragLinear(color);
+        color = pbrBaseLight(diffuseColor, specularColor, metallic, v, norm.xyz, perceptualRoughness, light_dir, sunlit, scol, radiance, irradiance, colorEmissive, ao, additive, atten);
     }
     else if (!GET_GBUFFER_FLAG(GBUFFER_FLAG_HAS_ATMOS))
     {

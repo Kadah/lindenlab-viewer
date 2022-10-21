@@ -1194,21 +1194,11 @@ void LLFloaterPreference::refreshEnabledState()
 
 void LLFloaterPreferenceGraphicsAdvanced::refreshEnabledState()
 {
-	LLComboBox* ctrl_reflections = getChild<LLComboBox>("Reflections");
-	LLTextBox* reflections_text = getChild<LLTextBox>("ReflectionsText");
-
-	// Reflections
-    BOOL reflections = LLCubeMap::sUseCubeMaps;
-	ctrl_reflections->setEnabled(reflections);
-	reflections_text->setEnabled(reflections);
-
     // WindLight
     LLSliderCtrl* sky = getChild<LLSliderCtrl>("SkyMeshDetail");
     LLTextBox* sky_text = getChild<LLTextBox>("SkyMeshDetailText");
     sky->setEnabled(TRUE);
     sky_text->setEnabled(TRUE);
-
-
 
 	LLCheckBoxCtrl* ctrl_ssao = getChild<LLCheckBoxCtrl>("UseSSAO");
 	LLCheckBoxCtrl* ctrl_dof = getChild<LLCheckBoxCtrl>("UseDoF");
@@ -1282,34 +1272,59 @@ void LLAvatarComplexityControls::setIndirectMaxArc()
 
 void LLFloaterPreferenceGraphicsAdvanced::disableUnavailableSettings()
 {	
-	LLComboBox* ctrl_reflections   = getChild<LLComboBox>("Reflections");
-	LLTextBox* reflections_text = getChild<LLTextBox>("ReflectionsText");
 	LLComboBox* ctrl_shadows = getChild<LLComboBox>("ShadowDetail");
 	LLTextBox* shadows_text = getChild<LLTextBox>("RenderShadowDetailText");
 	LLCheckBoxCtrl* ctrl_ssao = getChild<LLCheckBoxCtrl>("UseSSAO");
-	
-    // disabled deferred SSAO
-	if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderDeferredSSAO"))
+	LLCheckBoxCtrl* ctrl_dof = getChild<LLCheckBoxCtrl>("UseDoF");
+	LLSliderCtrl* sky = getChild<LLSliderCtrl>("SkyMeshDetail");
+	LLTextBox* sky_text = getChild<LLTextBox>("SkyMeshDetailText");
+
+	// disabled windlight
+	if (!LLFeatureManager::getInstance()->isFeatureAvailable("WindLightUseAtmosShaders"))
 	{
+		sky->setEnabled(FALSE);
+		sky_text->setEnabled(FALSE);
+
+		//deferred needs windlight, disable deferred
+		ctrl_shadows->setEnabled(FALSE);
+		ctrl_shadows->setValue(0);
+		shadows_text->setEnabled(FALSE);
+		
 		ctrl_ssao->setEnabled(FALSE);
 		ctrl_ssao->setValue(FALSE);
+
+		ctrl_dof->setEnabled(FALSE);
+		ctrl_dof->setValue(FALSE);
 	}
-	
-	// disabled deferred shadows
-	if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderShadowDetail"))
+
+	// disabled deferred
+	if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderDeferred"))
 	{
 		ctrl_shadows->setEnabled(FALSE);
 		ctrl_shadows->setValue(0);
 		shadows_text->setEnabled(FALSE);
-	}
+		
+		ctrl_ssao->setEnabled(FALSE);
+		ctrl_ssao->setValue(FALSE);
 
-	// disabled reflections
-	if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderReflectionDetail"))
-	{
-		ctrl_reflections->setEnabled(FALSE);
-		ctrl_reflections->setValue(FALSE);
-		reflections_text->setEnabled(FALSE);
+		ctrl_dof->setEnabled(FALSE);
+		ctrl_dof->setValue(FALSE);
 	}
+	
+    // disabled deferred SSAO
+	if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderDeferredSSAO"))
+	{
+		ctrl_ssao->setEnabled(FALSE);   
+		ctrl_ssao->setValue(FALSE);
+	}
+	
+	// disabled deferred shadows
+    if (!LLFeatureManager::getInstance()->isFeatureAvailable("RenderShadowDetail"))
+    {
+        ctrl_shadows->setEnabled(FALSE);
+        ctrl_shadows->setValue(0);
+        shadows_text->setEnabled(FALSE);
+    }
 }
 
 void LLFloaterPreference::refresh()

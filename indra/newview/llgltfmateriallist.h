@@ -26,24 +26,33 @@
 
 #pragma once
 
+#include "llfetchedgltfmaterial.h"
 #include "llgltfmaterial.h"
 #include "llpointer.h"
 
 #include <unordered_map>
+
+class LLFetchedGLTFMaterial;
 
 class LLGLTFMaterialList
 {
 public:
     LLGLTFMaterialList() {}
 
-    typedef std::unordered_map<LLUUID, LLPointer<LLGLTFMaterial > > List;
-    List mList;
 
     LLGLTFMaterial* getMaterial(const LLUUID& id);
 
-    void addMaterial(const LLUUID& id, LLGLTFMaterial* material);
+    void addMaterial(const LLUUID& id, LLFetchedGLTFMaterial* material);
     void removeMaterial(const LLUUID& id);
 
+    void flushMaterials();
+
+    static void registerCallbacks();
+private:
+    typedef std::unordered_map<LLUUID, LLPointer<LLFetchedGLTFMaterial > > uuid_mat_map_t;
+    uuid_mat_map_t mList;
+
+    LLUUID mLastUpdateKey;
 };
 
 extern LLGLTFMaterialList gGLTFMaterialList;

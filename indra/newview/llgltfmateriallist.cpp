@@ -28,30 +28,101 @@
 #include "llgltfmateriallist.h"
 
 #include "llassetstorage.h"
+#include "lldispatcher.h"
+#include "llfetchedgltfmaterial.h"
 #include "llfilesystem.h"
 #include "llsdserialize.h"
 #include "lltinygltfhelper.h"
+#include "llviewercontrol.h"
+#include "llviewergenericmessage.h"
+#include "llviewerobjectlist.h"
 
 #include "tinygltf/tiny_gltf.h"
 #include <strstream>
+
+#include "json/reader.h"
+#include "json/value.h"
+
+namespace
+{
+    class LLGLTFOverrideDispatchHandler : public LLDispatchHandler
+    {
+        LOG_CLASS(LLGLTFOverrideDispatchHandler);
+    public:
+        LLGLTFOverrideDispatchHandler() = default;
+        ~LLGLTFOverrideDispatchHandler() override = default;
+
+        bool operator()(const LLDispatcher* dispatcher, const std::string& key, const LLUUID& invoice, const sparam_t& strings) override
+        {
+            // iterate over pairs of parameters
+            int i;
+            for (i = 0; i+1 < strings.size(); i += 2)
+            {
+                std::string params_json = strings[i];
+                std::string override_json = strings[i+1];
+
+                LL_DEBUGS() << "received override: " << params_json << " | " << override_json << LL_ENDL;
+
+                Json::Value params;
+                Json::Reader reader;
+                bool success = reader.parse(params_json, params);
+                if (!success)
+                {
+                    LL_WARNS() << "failed to parse override parameters.  errors: " << reader.getFormatedErrorMessages() << LL_ENDL;
+                    break;
+                }
+
+                LLViewerObject * obj = gObjectList.findObject(LLUUID(params["object_id"].asString()));
+                S32 side = params["side"].asInt();
+
+                std::string warn_msg, error_msg;
+                LLPointer<LLGLTFMaterial> override_data = new LLGLTFMaterial();
+                success = override_data->fromJSON(override_json, warn_msg, error_msg);
+//                if (!success)
+//                {
+//                    LL_WARNS() << "failed to parse GLTF override data.  errors: " << error_msg << " | warnings: " << warn_msg << LL_ENDL;
+//                    break;
+//                }
+
+                if(obj)
+                {
+                    obj->setTEGLTFMaterialOverride(side, override_data);
+                }
+
+                LL_DEBUGS() << "successfully parsed override: " << override_data->asJSON() << LL_ENDL;
+            }
+
+            LL_WARNS_IF(i != strings.size()) << "parse error or unhandled mismatched odd number of parameters for material override" << LL_ENDL;
+
+            return true;
+        }
+    };
+    LLGLTFOverrideDispatchHandler handle_gltf_override_message;
+}
 
 LLGLTFMaterialList gGLTFMaterialList;
 
 LLGLTFMaterial* LLGLTFMaterialList::getMaterial(const LLUUID& id)
 {
-    List::iterator iter = mList.find(id);
+    uuid_mat_map_t::iterator iter = mList.find(id);
     if (iter == mList.end())
     {
-        LLGLTFMaterial* mat = new LLGLTFMaterial();
+        LLFetchedGLTFMaterial* mat = new LLFetchedGLTFMaterial();
         mList[id] = mat;
 
-        mat->ref();
+        if (!mat->mFetching)
+        {
+            // if we do multiple getAssetData calls,
+            // some will get distched, messing ref counter
+            // Todo: get rid of mat->ref()
+            mat->mFetching = true;
+            mat->ref();
 
-        gAssetStorage->getAssetData(id, LLAssetType::AT_MATERIAL,
-            [=](const LLUUID& id, LLAssetType::EType asset_type, void* user_data, S32 status, LLExtStat ext_status)
+            gAssetStorage->getAssetData(id, LLAssetType::AT_MATERIAL,
+                [=](const LLUUID& id, LLAssetType::EType asset_type, void* user_data, S32 status, LLExtStat ext_status)
             {
                 if (status)
-                { 
+                {
                     LL_WARNS() << "Error getting material asset data: " << LLAssetStorage::getErrorString(status) << " (" << status << ")" << LL_ENDL;
                 }
 
@@ -60,6 +131,7 @@ LLGLTFMaterial* LLGLTFMaterialList::getMaterial(const LLUUID& id)
                 if (!size)
                 {
                     LL_DEBUGS() << "Zero size material." << LL_ENDL;
+                    mat->mFetching = false;
                     mat->unref();
                     return;
                 }
@@ -83,18 +155,9 @@ LLGLTFMaterial* LLGLTFMaterialList::getMaterial(const LLUUID& id)
                             {
                                 std::string data = asset["data"];
 
-                                tinygltf::TinyGLTF gltf;
-                                tinygltf::TinyGLTF loader;
-                                std::string        error_msg;
-                                std::string        warn_msg;
+                                std::string warn_msg, error_msg;
 
-                                tinygltf::Model model_in;
-
-                                if (loader.LoadASCIIFromString(&model_in, &error_msg, &warn_msg, data.c_str(), data.length(), ""))
-                                {
-                                    LLTinyGLTFHelper::setFromModel(mat, model_in, 0);
-                                }
-                                else
+                                if (!mat->fromJSON(data, warn_msg, error_msg))
                                 {
                                     LL_WARNS() << "Failed to decode material asset: " << LL_ENDL;
                                     LL_WARNS() << warn_msg << LL_ENDL;
@@ -109,8 +172,10 @@ LLGLTFMaterial* LLGLTFMaterialList::getMaterial(const LLUUID& id)
                     LL_WARNS() << "Failed to deserialize material LLSD" << LL_ENDL;
                 }
 
+                mat->mFetching = false;
                 mat->unref();
             }, nullptr);
+        }
         
         return mat;
     }
@@ -118,7 +183,7 @@ LLGLTFMaterial* LLGLTFMaterialList::getMaterial(const LLUUID& id)
     return iter->second;
 }
 
-void LLGLTFMaterialList::addMaterial(const LLUUID& id, LLGLTFMaterial* material)
+void LLGLTFMaterialList::addMaterial(const LLUUID& id, LLFetchedGLTFMaterial* material)
 {
     mList[id] = material;
 }
@@ -128,3 +193,68 @@ void LLGLTFMaterialList::removeMaterial(const LLUUID& id)
     mList.erase(id);
 }
 
+void LLGLTFMaterialList::flushMaterials()
+{
+    // Similar variant to what textures use
+    static const S32 MIN_UPDATE_COUNT = gSavedSettings.getS32("TextureFetchUpdateMinCount");       // default: 32
+    //update MIN_UPDATE_COUNT or 5% of materials, whichever is greater
+    U32 update_count = llmax((U32)MIN_UPDATE_COUNT, (U32)mList.size() / 20);
+    update_count = llmin(update_count, (U32)mList.size());
+
+    const F64 MAX_INACTIVE_TIME = 30.f;
+    F64 cur_time = LLTimer::getTotalSeconds();
+
+    // advance iter one past the last key we updated
+    uuid_mat_map_t::iterator iter = mList.find(mLastUpdateKey);
+    if (iter != mList.end()) {
+        ++iter;
+    }
+
+    while (update_count-- > 0)
+    {
+        if (iter == mList.end())
+        {
+            iter = mList.begin();
+        }
+
+        LLPointer<LLFetchedGLTFMaterial> material = iter->second;
+        if (material->getNumRefs() == 2) // this one plus one from the list
+        {
+
+            if (!material->mActive
+                && cur_time > material->mExpectedFlusTime)
+            {
+                iter = mList.erase(iter);
+            }
+            else
+            {
+                if (material->mActive)
+                {
+                    material->mExpectedFlusTime = cur_time + MAX_INACTIVE_TIME;
+                    material->mActive = false;
+                }
+                ++iter;
+            }
+        }
+        else
+        {
+            material->mActive = true;
+            ++iter;
+        }
+    }
+
+    if (iter != mList.end())
+    {
+        mLastUpdateKey = iter->first;
+    }
+    else
+    {
+        mLastUpdateKey.setNull();
+    }
+}
+
+// static
+void LLGLTFMaterialList::registerCallbacks()
+{
+    gGenericDispatcher.addHandler("GLTF", &handle_gltf_override_message);
+}

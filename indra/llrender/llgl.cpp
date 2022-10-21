@@ -86,13 +86,13 @@ void APIENTRY gl_debug_callback(GLenum source,
                                 const GLchar* message,
                                 GLvoid* userParam)
 {
-    /*if (severity != GL_DEBUG_SEVERITY_HIGH // &&
-        severity != GL_DEBUG_SEVERITY_MEDIUM &&
-        severity != GL_DEBUG_SEVERITY_LOW
+    if (severity != GL_DEBUG_SEVERITY_HIGH // &&
+        //severity != GL_DEBUG_SEVERITY_MEDIUM &&
+        //severity != GL_DEBUG_SEVERITY_LOW
         )
     { //suppress out-of-spec messages sent by nvidia driver (mostly vertexbuffer hints)
         return;
-    }*/
+    }
 
     if (severity == GL_DEBUG_SEVERITY_HIGH)
     {
@@ -1206,14 +1206,14 @@ bool LLGLManager::initGL()
     stop_glerror();
     glGetIntegerv(GL_MAX_SAMPLES, &mMaxSamples);
     stop_glerror();
+
     if (mGLVersion >= 4.59f)
     {
         glGetFloatv(GL_MAX_TEXTURE_MAX_ANISOTROPY, &mMaxAnisotropy);
+        stop_glerror();
     }
-	stop_glerror();
-	
-	initGLStates();
 
+	initGLStates();
 	stop_glerror();
 
 	return true;

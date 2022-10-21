@@ -38,7 +38,7 @@ class LLViewerObject;
 #define LL_MAX_REFLECTION_PROBE_COUNT 256
 
 // reflection probe resolution
-#define LL_REFLECTION_PROBE_RESOLUTION 256
+#define LL_REFLECTION_PROBE_RESOLUTION 128
 #define LL_IRRADIANCE_MAP_RESOLUTION 64
 
 // reflection probe mininum scale
@@ -154,6 +154,8 @@ private:
 
     LLReflectionMap* mUpdatingProbe = nullptr;
     U32 mUpdatingFace = 0;
+
+    LLPointer<LLReflectionMap> mDefaultProbe;  // default reflection probe to fall back to for pixels with no probe influences (should always be at cube index 0)
 
     // number of reflection probes to use for rendering (based on saved setting RenderReflectionProbeCount)
     U32 mReflectionProbeCount;

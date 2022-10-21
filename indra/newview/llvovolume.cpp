@@ -1700,7 +1700,7 @@ BOOL LLVOVolume::genBBoxes(BOOL force_global, BOOL should_update_octree_bounds)
         // updates needed, set REBUILD_RIGGED accordingly.
 
         // Without the flag, this will remove unused rigged volumes, which we are not currently very aggressive about.
-        updateRiggedVolume();
+        updateRiggedVolume(false);
     }
 
     LLVolume* volume = mRiggedVolume;
@@ -1994,7 +1994,7 @@ BOOL LLVOVolume::updateGeometry(LLDrawable *drawable)
 	
 	if (mDrawable->isState(LLDrawable::REBUILD_RIGGED))
 	{
-		updateRiggedVolume();
+		updateRiggedVolume(false);
 		genBBoxes(FALSE);
 		mDrawable->clearState(LLDrawable::REBUILD_RIGGED);
 	}
@@ -2609,6 +2609,24 @@ S32 LLVOVolume::setTEMaterialParams(const U8 te, const LLMaterialPtr pMaterialPa
 	return TEM_CHANGE_TEXTURE;
 }
 
+S32 LLVOVolume::setTEGLTFMaterialOverride(U8 te, LLGLTFMaterial* mat)
+{
+    S32 retval = LLViewerObject::setTEGLTFMaterialOverride(te, mat);
+
+    if (retval == TEM_CHANGE_TEXTURE)
+    {
+        if (!mDrawable.isNull())
+        {
+            gPipeline.markTextured(mDrawable);
+            gPipeline.markRebuild(mDrawable, LLDrawable::REBUILD_ALL);
+        }
+        mFaceMappingChanged = TRUE;
+    }
+
+    return retval;
+}
+
+
 S32 LLVOVolume::setTEScale(const U8 te, const F32 s, const F32 t)
 {
 	S32 res = LLViewerObject::setTEScale(te, s, t);
@@ -2641,6 +2659,7 @@ S32 LLVOVolume::setTEScaleT(const U8 te, const F32 t)
 	}
 	return res;
 }
+
 
 void LLVOVolume::updateTEData()
 {
@@ -5126,8 +5145,7 @@ void LLRiggedVolume::update(const LLMeshSkinInfo* skin, LLVOAvatar* avatar, cons
 			}
 
 			{
-    			delete dst_face.mOctree;
-				dst_face.mOctree = NULL;
+                dst_face.destroyOctree();
 
 				LLVector4a size;
 				size.setSub(dst_face.mExtents[1], dst_face.mExtents[0]);
@@ -5223,7 +5241,7 @@ bool can_batch_texture(LLFace* facep)
 		return false;
 	}
 	
-    if (facep->getTextureEntry()->getGLTFMaterial() != nullptr)
+    if (facep->getTextureEntry()->getGLTFRenderMaterial() != nullptr)
     { // PBR materials break indexed texture batching
         return false;
     }
@@ -5390,7 +5408,7 @@ void LLVolumeGeometryManager::registerFace(LLSpatialGroup* group, LLFace* facep,
     
     LLUUID mat_id;
 
-    LLGLTFMaterial* gltf_mat = facep->getTextureEntry()->getGLTFMaterial();
+    auto* gltf_mat = (LLFetchedGLTFMaterial*) facep->getTextureEntry()->getGLTFRenderMaterial();
     if (gltf_mat != nullptr)
     {
         mat_id = gltf_mat->getHash(); // TODO: cache this hash
@@ -5519,21 +5537,7 @@ void LLVolumeGeometryManager::registerFace(LLSpatialGroup* group, LLFace* facep,
 
         if (gltf_mat)
         {
-            LLViewerObject* vobj = facep->getViewerObject();
-            U8 te = facep->getTEOffset();
-
-            draw_info->mTexture = vobj->getGLTFBaseColorMap(te);
-            draw_info->mNormalMap = vobj->getGLTFNormalMap(te);
-            draw_info->mSpecularMap = vobj->getGLTFMetallicRoughnessMap(te);
-            draw_info->mEmissiveMap = vobj->getGLTFEmissiveMap(te);
-            if (draw_info->mGLTFMaterial->mAlphaMode == LLGLTFMaterial::ALPHA_MODE_MASK)
-            {
-                draw_info->mAlphaMaskCutoff = gltf_mat->mAlphaCutoff * gltf_mat->mBaseColor.mV[3];
-            }
-            else
-            {
-                draw_info->mAlphaMaskCutoff = 1.f;
-            }
+            // nothing to do, render pools will reference the GLTF material
         }
         else if (mat)
 		{
@@ -5887,7 +5891,7 @@ void LLVolumeGeometryManager::rebuildGeom(LLSpatialGroup* group)
                 bool is_pbr = false;
 #endif
 #else
-                LLGLTFMaterial *gltf_mat = facep->getTextureEntry()->getGLTFMaterial();
+                LLGLTFMaterial *gltf_mat = facep->getTextureEntry()->getGLTFRenderMaterial();
                 bool is_pbr = gltf_mat != nullptr;
 #endif
 
@@ -6025,7 +6029,7 @@ void LLVolumeGeometryManager::rebuildGeom(LLSpatialGroup* group)
 						if (gPipeline.canUseWindLightShadersOnObjects()
 							&& LLPipeline::sRenderBump)
 						{
-                            LLGLTFMaterial* gltf_mat = te->getGLTFMaterial();
+                            LLGLTFMaterial* gltf_mat = te->getGLTFRenderMaterial();
 
 							if (LLPipeline::sRenderDeferred && 
                                 (gltf_mat != nullptr || (te->getMaterialParams().notNull()  && !te->getMaterialID().isNull())))
@@ -6117,7 +6121,7 @@ void LLVolumeGeometryManager::rebuildGeom(LLSpatialGroup* group)
 			else
 			{
 				drawablep->clearState(LLDrawable::RIGGED);
-                vobj->updateRiggedVolume();
+                vobj->updateRiggedVolume(false);
 			}
 		}
 	}
@@ -6464,11 +6468,7 @@ U32 LLVolumeGeometryManager::genDrawInfo(LLSpatialGroup* group, U32 mask, LLFace
         buffer_index = -1;
     }
 
-	static LLCachedControl<U32> max_texture_index(gSavedSettings, "RenderMaxTextureIndex", 16);
-	texture_index_channels = llmin(texture_index_channels, (S32) max_texture_index);
-	
-	//NEVER use more than 16 texture index channels (workaround for prevalent driver bug)
-	texture_index_channels = llmin(texture_index_channels, 16);
+	texture_index_channels = LLGLSLShader::sIndexedTextureChannels;
 
 	bool flexi = false;
 
@@ -6734,7 +6734,7 @@ U32 LLVolumeGeometryManager::genDrawInfo(LLSpatialGroup* group, U32 mask, LLFace
 
 			BOOL is_alpha = (facep->getPoolType() == LLDrawPool::POOL_ALPHA) ? TRUE : FALSE;
 		
-            LLGLTFMaterial* gltf_mat = te->getGLTFMaterial();
+            LLGLTFMaterial* gltf_mat = te->getGLTFRenderMaterial();
 
             LLMaterial* mat = nullptr;
             bool can_be_shiny = false;

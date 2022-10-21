@@ -72,7 +72,7 @@ uniform vec3 light_diffuse[8];
 void waterClip(vec3 pos);
 
 #ifdef WATER_FOG
-vec4 applyWaterFogView(vec3 pos, vec4 color);
+vec4 applyWaterFogViewLinear(vec3 pos, vec4 color);
 #endif
 
 vec3 srgb_to_linear(vec3 c);
@@ -84,7 +84,7 @@ vec3 atmosFragLightingLinear(vec3 light, vec3 additive, vec3 atten);
 
 void calcAtmosphericVarsLinear(vec3 inPositionEye, vec3 norm, vec3 light_dir, out vec3 sunlit, out vec3 amblit, out vec3 atten, out vec3 additive);
 
-#ifdef HAS_SHADOW
+#ifdef HAS_SUN_SHADOW
 float sampleDirectionalShadow(vec3 pos, vec3 norm, vec2 pos_screen);
 #endif
 
@@ -180,15 +180,17 @@ vec3 calcPointLightOrSpotLight(vec3 light_col, vec3 diffuse, vec3 v, vec3 n, vec
 void main() 
 {
     vec2 frag = vary_fragcoord.xy/vary_fragcoord.z*0.5+0.5;
-    frag *= screen_res;
     
     vec4 pos = vec4(vary_position, 1.0);
+#ifndef IS_AVATAR_SKIN
+    // clip against water plane unless this is a legacy avatar skin
     waterClip(pos.xyz);
+#endif
     vec3 norm = vary_norm;
 
     float shadow = 1.0f;
 
-#ifdef HAS_SHADOW
+#ifdef HAS_SUN_SHADOW
     shadow = sampleDirectionalShadow(pos.xyz, norm.xyz, frag);
 #endif
 
@@ -293,12 +295,11 @@ void main()
 #endif // !defined(LOCAL_LIGHT_KILL)
 
 #ifdef WATER_FOG
-    color = applyWaterFogView(pos.xyz, color);
+    color = applyWaterFogViewLinear(pos.xyz, color);
 #endif // WATER_FOG
 
 #endif // #else // FOR_IMPOSTOR
 
-    //color.rgb = waterPlane.xyz * 0.5 + 0.5;
     frag_color = color;
 }
 

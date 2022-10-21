@@ -1749,7 +1749,7 @@ void LLEnvironment::updateGLVariablesForSettings(LLShaderUniforms* uniforms, con
                 break;
             }
             //_WARNS("RIDER") << "pushing '" << (*it).first << "' as " << vect4 << LL_ENDL;
-            shader->uniform4fv(it.second.getShaderKey(), vect4 );
+            shader->uniform3fv(it.second.getShaderKey(), LLVector3(vect4.mV) );
             break;
         }
 
@@ -2660,7 +2660,7 @@ void LLEnvironment::setExperienceEnvironment(LLUUID experience_id, LLSD data, F3
 
     if (!water.isUndefined())
     {
-        environment->injectWaterSettings(sky, experience_id, LLSettingsBase::Seconds(transition_time));
+        environment->injectWaterSettings(water, experience_id, LLSettingsBase::Seconds(transition_time));
     }
 
     if (updateenvironment)

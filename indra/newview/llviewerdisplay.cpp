@@ -31,6 +31,7 @@
 #include "llgl.h"
 #include "llrender.h"
 #include "llglheaders.h"
+#include "llgltfmateriallist.h"
 #include "llagent.h"
 #include "llagentcamera.h"
 #include "llviewercontrol.h"
@@ -254,7 +255,7 @@ static LLTrace::BlockTimerStatHandle FTM_IMAGE_UPDATE("Update Images");
 static LLTrace::BlockTimerStatHandle FTM_IMAGE_UPDATE_CLASS("Class");
 static LLTrace::BlockTimerStatHandle FTM_IMAGE_UPDATE_BUMP("Image Update Bump");
 static LLTrace::BlockTimerStatHandle FTM_IMAGE_UPDATE_LIST("List");
-static LLTrace::BlockTimerStatHandle FTM_IMAGE_UPDATE_DELETE("Delete");
+static LLTrace::BlockTimerStatHandle FTM_MATERIALS_FLUSH("GLTF Materials Cleanup");
 static LLTrace::BlockTimerStatHandle FTM_RESIZE_WINDOW("Resize Window");
 static LLTrace::BlockTimerStatHandle FTM_HUD_UPDATE("HUD Update");
 static LLTrace::BlockTimerStatHandle FTM_DISPLAY_UPDATE_GEOM("Update Geom");
@@ -772,7 +773,6 @@ void display(BOOL rebuild, F32 zoom_factor, int subfield, BOOL for_snapshot)
 		{
 			LL_PROFILE_ZONE_NAMED_CATEGORY_DISPLAY("display - 3")
 			LLAppViewer::instance()->pingMainloopTimeout("Display:Imagery");
-			gPipeline.generateWaterReflection(*LLViewerCamera::getInstance());
 			gPipeline.generateHighlight(*LLViewerCamera::getInstance());
 			gPipeline.renderPhysicsDisplay();
 		}
@@ -808,12 +808,11 @@ void display(BOOL rebuild, F32 zoom_factor, int subfield, BOOL for_snapshot)
 				gTextureList.updateImages(max_image_decode_time);
 			}
 
-			/*{
-				LL_RECORD_BLOCK_TIME(FTM_IMAGE_UPDATE_DELETE);
-				//remove dead textures from GL
-				LLImageGL::deleteDeadTextures();
-				stop_glerror();
-			}*/
+			{
+				LL_RECORD_BLOCK_TIME(FTM_MATERIALS_FLUSH);
+				//remove dead gltf materials
+                gGLTFMaterialList.flushMaterials();
+			}
 		}
 
 		LLGLState::checkStates();
@@ -861,7 +860,6 @@ void display(BOOL rebuild, F32 zoom_factor, int subfield, BOOL for_snapshot)
 		{
 			glClearColor(0.5f, 0.5f, 0.5f, 0.f);
 			glClear(GL_COLOR_BUFFER_BIT);
-			glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
 		}
 
 		LLAppViewer::instance()->pingMainloopTimeout("Display:RenderStart");
@@ -914,7 +912,15 @@ void display(BOOL rebuild, F32 zoom_factor, int subfield, BOOL for_snapshot)
         if (LLPipeline::sRenderDeferred)
         {
             gPipeline.mRT->deferredScreen.bindTarget();
-            glClearColor(1, 0, 1, 1);
+            if (gUseWireframe)
+            {
+                F32 g = 0.5f;
+                glClearColor(g, g, g, 1.f);
+            }
+            else
+            {
+                glClearColor(1, 0, 1, 1);
+            }
             gPipeline.mRT->deferredScreen.clear();
         }
         else
@@ -1103,6 +1109,7 @@ void display_cube_face()
     gPipeline.updateCull(*LLViewerCamera::getInstance(), result);
 
     gGL.setColorMask(true, true);
+
     glClearColor(0, 0, 0, 0);
     gPipeline.generateSunShadow(*LLViewerCamera::getInstance());
         
@@ -1133,7 +1140,14 @@ void display_cube_face()
     gGL.setColorMask(true, true);
 
     gPipeline.mRT->deferredScreen.bindTarget();
-    glClearColor(1, 0, 1, 1);
+    if (gUseWireframe)
+    {
+        glClearColor(0.5f, 0.5f, 0.5f, 1.f);
+    }
+    else
+    {
+        glClearColor(1, 0, 1, 1);
+    }
     gPipeline.mRT->deferredScreen.clear();
         
     gGL.setColorMask(true, false);
@@ -1239,7 +1253,7 @@ void render_hud_attachments()
 		
 		gPipeline.stateSort(hud_cam, result);
 
-		gPipeline.renderGeom(hud_cam);
+		gPipeline.renderGeomPostDeferred(hud_cam);
 
 		LLSpatialGroup::sNoDelete = FALSE;
 		//gPipeline.clearReferences();
@@ -1421,9 +1435,8 @@ void render_ui(F32 zoom_factor, int subfield)
         if (render_ui)
         {
             LL_PROFILE_ZONE_NAMED_CATEGORY_UI("UI 2D"); //LL_RECORD_BLOCK_TIME(FTM_RENDER_UI_2D);
+            LLHUDObject::renderAll();
             render_ui_2d();
-            LLGLState::checkStates();
-            gGL.flush();
         }
 
         gViewerWindow->setup2DRender();

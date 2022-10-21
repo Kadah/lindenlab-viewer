@@ -60,6 +60,7 @@
 #include "llfloatergridstatus.h"
 #include "llfloaterimsession.h"
 #include "lllocationhistory.h"
+#include "llgltfmateriallist.h"
 #include "llimageworker.h"
 
 #include "llloginflags.h"
@@ -662,7 +663,7 @@ bool idle_startup()
 #else
 				void* window_handle = NULL;
 #endif
-				bool init = gAudiop->init(kAUDIO_NUM_SOURCES, window_handle, LLAppViewer::instance()->getSecondLifeTitle());
+				bool init = gAudiop->init(window_handle, LLAppViewer::instance()->getSecondLifeTitle());
 				if(init)
 				{
 					gAudiop->setMuted(TRUE);
@@ -1285,9 +1286,6 @@ bool idle_startup()
 		// Initialize classes w/graphics stuff.
 		//
 		LLViewerStatsRecorder::instance(); // Since textures work in threads
-		gTextureList.doPrefetchImages();		
-		display_startup();
-
 		LLSurface::initClasses();
 		display_startup();
 
@@ -1432,6 +1430,12 @@ bool idle_startup()
 	if (STATE_SEED_CAP_GRANTED == LLStartUp::getStartupState())
 	{
 		display_startup();
+
+        // These textures are not warrantied to be cached, so needs
+        // to hapen with caps granted
+        gTextureList.doPrefetchImages();
+
+        display_startup();
 		update_texture_fetch();
 		display_startup();
 
@@ -1471,6 +1475,9 @@ bool idle_startup()
 		display_startup();
 
 		gXferManager->registerCallbacks(gMessageSystem);
+		display_startup();
+
+		LLGLTFMaterialList::registerCallbacks();
 		display_startup();
 
 		LLStartUp::initNameCache();

@@ -41,10 +41,13 @@ extern BOOL gTeleportDisplay;
 
 LLReflectionMapManager::LLReflectionMapManager()
 {
-    for (int i = 0; i < LL_MAX_REFLECTION_PROBE_COUNT; ++i)
+    for (int i = 1; i < LL_MAX_REFLECTION_PROBE_COUNT; ++i)
     {
         mCubeFree[i] = true;
     }
+
+    // cube index 0 is reserved for the fallback probe
+    mCubeFree[0] = false;
 }
 
 struct CompareReflectionMapDistance
@@ -85,7 +88,7 @@ void LLReflectionMapManager::update()
         const bool use_depth_buffer = true;
         const bool use_stencil_buffer = false;
         U32 targetRes = LL_REFLECTION_PROBE_RESOLUTION * 2; // super sample
-        mRenderTarget.allocate(targetRes, targetRes, color_fmt, use_depth_buffer, use_stencil_buffer, LLTexUnit::TT_RECT_TEXTURE);
+        mRenderTarget.allocate(targetRes, targetRes, color_fmt, use_depth_buffer, use_stencil_buffer, LLTexUnit::TT_TEXTURE);
     }
 
     if (mMipChain.empty())
@@ -96,12 +99,21 @@ void LLReflectionMapManager::update()
         mMipChain.resize(count);
         for (int i = 0; i < count; ++i)
         {
-            mMipChain[i].allocate(res, res, GL_RGBA16F, false, false, LLTexUnit::TT_RECT_TEXTURE);
+            mMipChain[i].allocate(res, res, GL_RGBA16F, false, false, LLTexUnit::TT_TEXTURE);
             res /= 2;
         }
     }
 
 
+    if (mDefaultProbe.isNull())
+    {
+        mDefaultProbe = addProbe();
+        mDefaultProbe->mDistance = -4096.f; // hack to make sure the default probe is always first in sort order
+        mDefaultProbe->mRadius = 4096.f;
+    }
+
+    mDefaultProbe->mOrigin.load3(LLViewerCamera::getInstance()->getOrigin().mV);
+    
     LLVector4a camera_pos;
     camera_pos.load3(LLViewerCamera::instance().getOrigin().mV);
 
@@ -174,8 +186,11 @@ void LLReflectionMapManager::update()
             closestDynamic = probe;
         }
 
-        d.setSub(camera_pos, probe->mOrigin);
-        probe->mDistance = d.getLength3().getF32()-probe->mRadius;
+        if (probe != mDefaultProbe)
+        {
+            d.setSub(camera_pos, probe->mOrigin);
+            probe->mDistance = d.getLength3().getF32() - probe->mRadius;
+        }
     }
 
     if (realtime && closestDynamic != nullptr)
@@ -196,7 +211,8 @@ void LLReflectionMapManager::update()
         if (probe->mCubeIndex == -1)
         {
             probe->mCubeArray = mTexture;
-            probe->mCubeIndex = allocateCubeIndex();
+
+            probe->mCubeIndex = probe == mDefaultProbe ? 0 : allocateCubeIndex();
         }
 
         probe->autoAdjustOrigin();
@@ -346,6 +362,8 @@ void LLReflectionMapManager::deleteProbe(U32 i)
     LL_PROFILE_ZONE_SCOPED_CATEGORY_DISPLAY;
     LLReflectionMap* probe = mProbes[i];
 
+    llassert(probe != mDefaultProbe);
+
     if (probe->mCubeIndex != -1)
     { // mark the cube index used by this probe as being free
         mCubeFree[probe->mCubeIndex] = true;
@@ -419,8 +437,8 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
 
         S32 mips = log2((F32)LL_REFLECTION_PROBE_RESOLUTION) + 0.5f;
 
-        S32 diffuseChannel = gReflectionMipProgram.enableTexture(LLShaderMgr::DEFERRED_DIFFUSE, LLTexUnit::TT_RECT_TEXTURE);
-        S32 depthChannel = gReflectionMipProgram.enableTexture(LLShaderMgr::DEFERRED_DEPTH, LLTexUnit::TT_RECT_TEXTURE);
+        S32 diffuseChannel = gReflectionMipProgram.enableTexture(LLShaderMgr::DEFERRED_DIFFUSE, LLTexUnit::TT_TEXTURE);
+        S32 depthChannel   = gReflectionMipProgram.enableTexture(LLShaderMgr::DEFERRED_DEPTH, LLTexUnit::TT_TEXTURE);
 
         LLRenderTarget* screen_rt = &gPipeline.mAuxillaryRT.screen;
         LLRenderTarget* depth_rt = &gPipeline.mAuxillaryRT.deferredScreen;
@@ -429,7 +447,6 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
         {
             LL_PROFILE_GPU_ZONE("probe mip");
             mMipChain[i].bindTarget();
-
             if (i == 0)
             {
                 
@@ -455,13 +472,13 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
             gGL.texCoord2f(0, 0);
             gGL.vertex2f(-1, -1);
 
-            gGL.texCoord2f(res, 0);
+            gGL.texCoord2f(1.f, 0);
             gGL.vertex2f(1, -1);
 
-            gGL.texCoord2f(res, res);
+            gGL.texCoord2f(1.f, 1.f);
             gGL.vertex2f(1, 1);
 
-            gGL.texCoord2f(0, res);
+            gGL.texCoord2f(0, 1.f);
             gGL.vertex2f(-1, 1);
             gGL.end();
             gGL.flush();
@@ -489,8 +506,8 @@ void LLReflectionMapManager::updateProbeFace(LLReflectionMap* probe, U32 face)
         gGL.matrixMode(gGL.MM_MODELVIEW);
         gGL.popMatrix();
 
-        gGL.getTexUnit(diffuseChannel)->unbind(LLTexUnit::TT_RECT_TEXTURE);
-        gGL.getTexUnit(depthChannel)->unbind(LLTexUnit::TT_RECT_TEXTURE);
+        gGL.getTexUnit(diffuseChannel)->unbind(LLTexUnit::TT_TEXTURE);
+        gGL.getTexUnit(depthChannel)->unbind(LLTexUnit::TT_TEXTURE);
         gReflectionMipProgram.unbind();
     }
 
@@ -607,6 +624,10 @@ void LLReflectionMapManager::shift(const LLVector4a& offset)
 void LLReflectionMapManager::updateNeighbors(LLReflectionMap* probe)
 {
     LL_PROFILE_ZONE_SCOPED_CATEGORY_DISPLAY;
+    if (mDefaultProbe == probe)
+    {
+        return;
+    }
 
     //remove from existing neighbors
     {
@@ -627,7 +648,7 @@ void LLReflectionMapManager::updateNeighbors(LLReflectionMap* probe)
         LL_PROFILE_ZONE_NAMED_CATEGORY_DISPLAY("rmmun - search");
         for (auto& other : mProbes)
         {
-            if (other != probe)
+            if (other != mDefaultProbe && other != probe)
             {
                 if (probe->intersects(other))
                 {

@@ -27,14 +27,30 @@
 #pragma once
 
 #include "llrefcount.h"
+#include "llmemory.h"
 #include "v4color.h"
 #include "v3color.h"
+#include "v2math.h"
 #include "lluuid.h"
 #include "llmd5.h"
+
+#include <string>
+
+namespace tinygltf
+{
+    class Model;
+}
 
 class LLGLTFMaterial : public LLRefCount
 {
 public:
+
+    struct TextureTransform
+    {
+        LLVector2 mOffset = { 0.f, 0.f };
+        LLVector2 mScale = { 1.f, 1.f };
+        F32 mRotation = 0.f;
+    };
 
     enum AlphaMode
     {
@@ -43,13 +59,18 @@ public:
         ALPHA_MODE_MASK
     };
 
+    LLGLTFMaterial() {}
+    LLGLTFMaterial(const LLGLTFMaterial& rhs);
+
+    LLGLTFMaterial& operator=(const LLGLTFMaterial& rhs);
+
     LLUUID mBaseColorId;
     LLUUID mNormalId;
     LLUUID mMetallicRoughnessId;
     LLUUID mEmissiveId;
 
-    LLColor4 mBaseColor = LLColor4(1,1,1,1);
-    LLColor3 mEmissiveColor = LLColor3(0,0,0);
+    LLColor4 mBaseColor = LLColor4(1, 1, 1, 1);
+    LLColor3 mEmissiveColor = LLColor3(0, 0, 0);
 
     F32 mMetallicFactor = 0.f;
     F32 mRoughnessFactor = 0.f;
@@ -63,12 +84,59 @@ public:
     {
         LL_PROFILE_ZONE_SCOPED_CATEGORY_TEXTURE;
         LLMD5 md5;
-        md5.update((unsigned char*) this, sizeof(this));
+        md5.update((unsigned char*)this, sizeof(this));
         md5.finalize();
         LLUUID id;
         md5.raw_digest(id.mData);
+        // *TODO: Hash the overrides
         return id;
     }
+
+    enum TextureInfo : U32
+    {
+        GLTF_TEXTURE_INFO_BASE_COLOR,
+        GLTF_TEXTURE_INFO_NORMAL,
+        GLTF_TEXTURE_INFO_METALLIC_ROUGHNESS,
+        GLTF_TEXTURE_INFO_EMISSIVE,
+
+        GLTF_TEXTURE_INFO_COUNT
+    };
+
+    std::array<TextureTransform, GLTF_TEXTURE_INFO_COUNT> mTextureTransform;
+
+    //setters for various members (will clamp to acceptable ranges)
+
+    void setBaseColorId(const LLUUID& id);
+    void setNormalId(const LLUUID& id);
+    void setMetallicRoughnessId(const LLUUID& id);
+    void setEmissiveId(const LLUUID& id);
+
+    void setBaseColorFactor(const LLColor3& baseColor, F32 transparency);
+    void setAlphaCutoff(F32 cutoff);
+    void setEmissiveColorFactor(const LLColor3& emissiveColor);
+    void setMetallicFactor(F32 metallic);
+    void setRoughnessFactor(F32 roughness);
+    void setAlphaMode(S32 mode);
+    void setDoubleSided(bool double_sided);
+    void setTextureOffset(TextureInfo texture_info, const LLVector2& offset);
+    void setTextureScale(TextureInfo texture_info, const LLVector2& scale);
+    void setTextureRotation(TextureInfo texture_info, float rotation);
+
+    // Default value accessors
+    static LLUUID getDefaultBaseColorId();
+    static LLUUID getDefaultNormalId();
+    static LLUUID getDefaultEmissiveId();
+    static LLUUID getDefaultMetallicRoughnessId();
+    static F32 getDefaultAlphaCutoff();
+    static S32 getDefaultAlphaMode();
+    static F32 getDefaultMetallicFactor();
+    static F32 getDefaultRoughnessFactor();
+    static LLColor4 getDefaultBaseColor();
+    static LLColor3 getDefaultEmissiveColor();
+    static bool getDefaultDoubleSided();
+    static LLVector2 getDefaultTextureOffset();
+    static LLVector2 getDefaultTextureScale();
+    static F32 getDefaultTextureRotation();
 
     // set mAlphaMode from string.
     // Anything otherthan "MASK" or "BLEND" sets mAlphaMode to ALPHA_MODE_OPAQUE
@@ -88,7 +156,7 @@ public:
         }
     }
 
-    const char* getAlphaMode()
+    const char* getAlphaMode() const
     {
         switch (mAlphaMode)
         {
@@ -97,7 +165,29 @@ public:
         default: return "OPAQUE";
         }
     }
+
+    // set the contents of this LLGLTFMaterial from the given json
+    // returns true if successful
+    // json - the json text to load from
+    // warn_msg - warning message from TinyGLTF if any
+    // error_msg - error_msg from TinyGLTF if any
+    bool fromJSON(const std::string& json, std::string& warn_msg, std::string& error_msg);
+
+    // get the contents of this LLGLTFMaterial as a json string
+    std::string asJSON(bool prettyprint = false) const;
+
+    // initialize from given tinygltf::Model
+    // model - the model to reference
+    // mat_index - index of material in model's material array
+    void setFromModel(const tinygltf::Model& model, S32 mat_index);
+
+    // write to given tinygltf::Model
+    void writeToModel(tinygltf::Model& model, S32 mat_index) const;
+
+    // calculate the fields in this material that differ from a base material and write them out to a given tinygltf::Model
+    void writeOverridesToModel(tinygltf::Model& model, S32 mat_index, LLGLTFMaterial const* base_material) const;
+
+    void applyOverride(const LLGLTFMaterial& override_mat);
+
 };
-
-
 

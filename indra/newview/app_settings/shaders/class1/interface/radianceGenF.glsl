@@ -36,6 +36,7 @@ VARYING vec3 vary_dir;
 //uniform float roughness;
 
 uniform float mipLevel;
+uniform int u_width; 
 
 // =============================================================================================================
 // Parts of this file are (c) 2018 Sascha Willems
@@ -124,10 +125,10 @@ vec4 prefilterEnvMap(vec3 R)
 	vec3 V = R;
 	vec4 color = vec4(0.0);
 	float totalWeight = 0.0;
-	float envMapDim = 256.0;
+	float envMapDim = u_width;
     int numSamples = 4;
     
-    float numMips = 7.0;
+    float numMips = 6.0;
 
     float roughness = mipLevel/numMips;
 
@@ -151,7 +152,7 @@ vec4 prefilterEnvMap(vec3 R)
 			// Solid angle of 1 pixel across all cube faces
 			float omegaP = 4.0 * PI / (6.0 * envMapDim * envMapDim);
 			// Biased (+1.0) mip level for better result
-			float mip = roughness == 0.0 ? 0.0 : clamp(0.5 * log2(omegaS / omegaP) + 1.0, 0.0f, 7.f);
+			float mip = roughness == 0.0 ? 0.0 : clamp(0.5 * log2(omegaS / omegaP) + 1.0, 0.0f, numMips);
             //float mip = clamp(0.5 * log2(omegaS / omegaP) + 1.0, 0.0f, 7.f);
 			color += textureLod(reflectionProbes, vec4(L,sourceIdx), mip) * dotNL;
 			totalWeight += dotNL;

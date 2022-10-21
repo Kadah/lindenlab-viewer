@@ -48,8 +48,8 @@ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 */
 
-uniform sampler2DRect   normalMap;
-uniform sampler2DRect   depthMap;
+uniform sampler2D   normalMap;
+uniform sampler2D   depthMap;
 uniform sampler2D projectionMap; // rgba
 uniform sampler2D brdfLut;
 
@@ -73,6 +73,8 @@ const float M_PI = 3.14159265;
 const float ONE_OVER_PI = 0.3183098861;
 
 vec3 srgb_to_linear(vec3 cs);
+vec3 atmosFragLightingLinear(vec3 light, vec3 additive, vec3 atten);
+vec3 scaleSoftClipFragLinear(vec3 light);
 
 float calcLegacyDistanceAttenuation(float distance, float falloff)
 {
@@ -136,10 +138,6 @@ bool clipProjectedLightVars(vec3 light_center, vec3 pos, out float dist, out flo
 vec2 getScreenCoordinate(vec2 screenpos)
 {
     vec2 sc = screenpos.xy * 2.0;
-    if (screen_res.x > 0 && screen_res.y > 0)
-    {
-       sc /= screen_res;
-    }
     return sc - vec2(1.0, 1.0);
 }
 
@@ -147,7 +145,7 @@ vec2 getScreenCoordinate(vec2 screenpos)
 //      Method #4: Spheremap Transform, Lambert Azimuthal Equal-Area projection
 vec3 getNorm(vec2 screenpos)
 {
-   vec2 enc = texture2DRect(normalMap, screenpos.xy).xy;
+   vec2 enc = texture2D(normalMap, screenpos.xy).xy;
    vec2 fenc = enc*4-2;
    float f = dot(fenc,fenc);
    float g = sqrt(1-f/4);
@@ -173,7 +171,7 @@ vec3 getNormalFromPacked(vec4 packedNormalEnvIntensityFlags)
 // See: C++: addDeferredAttachments(), GLSL: softenLightF
 vec4 getNormalEnvIntensityFlags(vec2 screenpos, out vec3 n, out float envIntensity)
 {
-    vec4 packedNormalEnvIntensityFlags = texture2DRect(normalMap, screenpos.xy);
+    vec4 packedNormalEnvIntensityFlags = texture2D(normalMap, screenpos.xy);
     n = getNormalFromPacked( packedNormalEnvIntensityFlags );
     envIntensity = packedNormalEnvIntensityFlags.z;
     return packedNormalEnvIntensityFlags;
@@ -188,7 +186,7 @@ float linearDepth(float d, float znear, float zfar)
 
 float getDepth(vec2 pos_screen)
 {
-    float depth = texture2DRect(depthMap, pos_screen).r;
+    float depth = texture2D(depthMap, pos_screen).r;
     return depth;
 }
 
@@ -331,6 +329,14 @@ vec4 getPositionWithDepth(vec2 pos_screen, float depth)
     return vec4(getPositionWithNDC(ndc), 1.0);
 }
 
+vec2 getScreenCoord(vec4 clip)
+{
+    vec4 ndc = clip;
+         ndc.xyz /= clip.w;
+    vec2 screen = vec2( ndc.xy * 0.5 );
+         screen += 0.5;
+    return screen;
+}
 
 vec2 getScreenXY(vec4 clip)
 {
@@ -502,6 +508,31 @@ vec3 pbrPunctual(vec3 diffuseColor, vec3 specularColor,
 	vec3 specContrib = F * G * D / (4.0 * NdotL * NdotV);
 	// Obtain final intensity as reflectance (BRDF) scaled by the energy of the light (cosine law)
 	vec3 color = NdotL * u_LightColor * (diffuseContrib + specContrib);
+
+    return color;
+}
+
+void calcDiffuseSpecular(vec3 baseColor, float metallic, inout vec3 diffuseColor, inout vec3 specularColor)
+{
+    vec3 f0 = vec3(0.04);
+    diffuseColor = baseColor*(vec3(1.0)-f0);
+    diffuseColor *= 1.0 - metallic;
+    specularColor = mix(f0, baseColor, metallic);
+}
+
+vec3 pbrBaseLight(vec3 diffuseColor, vec3 specularColor, float metallic, vec3 v, vec3 norm, float perceptualRoughness, vec3 light_dir, vec3 sunlit, float scol, vec3 radiance, vec3 irradiance, vec3 colorEmissive, float ao, vec3 additive, vec3 atten)
+{
+    vec3 color = vec3(0);
+
+    float NdotV = clamp(abs(dot(norm, v)), 0.001, 1.0);
+    
+    color += pbrIbl(diffuseColor, specularColor, radiance, irradiance, ao, NdotV, perceptualRoughness);
+    
+    color += pbrPunctual(diffuseColor, specularColor, perceptualRoughness, metallic, norm, v, normalize(light_dir)) * sunlit * 2.75 * scol;
+    color += colorEmissive*0.5;
+
+    color = atmosFragLightingLinear(color, additive, atten);
+    color = scaleSoftClipFragLinear(color);
 
     return color;
 }
