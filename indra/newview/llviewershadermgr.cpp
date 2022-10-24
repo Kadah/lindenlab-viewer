@@ -1483,12 +1483,6 @@ BOOL LLViewerShaderMgr::loadShadersDeferred()
 
             gDeferredMaterialProgram[i].addPermutation("DIFFUSE_ALPHA_MODE", llformat("%d", alpha_mode));
 
-            if (alpha_mode != 0)
-            {
-                gDeferredMaterialProgram[i].mFeatures.hasAlphaMask = true;
-                gDeferredMaterialProgram[i].addPermutation("HAS_ALPHA_MASK", "1");
-            }
-
             if (use_sun_shadow)
             {
                 gDeferredMaterialProgram[i].addPermutation("HAS_SUN_SHADOW", "1");
@@ -1547,12 +1541,6 @@ BOOL LLViewerShaderMgr::loadShadersDeferred()
             }
 
             gDeferredMaterialWaterProgram[i].addPermutation("DIFFUSE_ALPHA_MODE", llformat("%d", alpha_mode));
-            if (alpha_mode != 0)
-            {
-                gDeferredMaterialWaterProgram[i].mFeatures.hasAlphaMask = true;
-                gDeferredMaterialWaterProgram[i].addPermutation("HAS_ALPHA_MASK", "1");
-            }
-
             if (use_sun_shadow)
             {
                 gDeferredMaterialWaterProgram[i].addPermutation("HAS_SUN_SHADOW", "1");
