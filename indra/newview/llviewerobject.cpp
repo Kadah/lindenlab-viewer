@@ -247,6 +247,7 @@ LLViewerObject *LLViewerObject::createObject(const LLUUID &id, const LLPCode pco
 	  LL_WARNS() << "Unknown object pcode " << (S32)pcode << LL_ENDL;
 	  res = NULL; break;
 	}
+
 	return res;
 }
 
@@ -5324,14 +5325,17 @@ S32 LLViewerObject::setTEGLTFMaterialOverride(U8 te, LLGLTFMaterial* override_ma
 
     LLTextureEntry* tep = getTE(te);
     if (!tep)
-    {
-        LL_WARNS() << "No texture entry for te " << (S32)te << ", object " << mID << LL_ENDL;
+    { // this could happen if the object is not fully formed yet
+        // returning TEM_CHANGE_NONE here signals to LLGLTFMaterialList to queue the override for later
         return retval;
     }
 
     LLFetchedGLTFMaterial* src_mat = (LLFetchedGLTFMaterial*) tep->getGLTFMaterial();
 
     tep->setGLTFMaterialOverride(override_mat);
+
+    // if override mat exists, we must also have a source mat
+    llassert(override_mat ? src_mat : true);
 
     if (override_mat && src_mat)
     {
