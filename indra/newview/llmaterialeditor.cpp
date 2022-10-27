@@ -65,6 +65,8 @@ const std::string MATERIAL_NORMAL_DEFAULT_NAME = "Normal";
 const std::string MATERIAL_METALLIC_DEFAULT_NAME = "Metallic Roughness";
 const std::string MATERIAL_EMISSIVE_DEFAULT_NAME = "Emissive";
 
+const LLUUID LIVE_MATERIAL_EDITOR_KEY("6cf97162-8b68-49eb-b627-79886c9fd17d");
+
 LLFloaterComboOptions::LLFloaterComboOptions()
     : LLFloater(LLSD())
 {
@@ -200,8 +202,6 @@ LLMaterialEditor::LLMaterialEditor(const LLSD& key)
     , mHasUnsavedChanges(false)
     , mExpectedUploadCost(0)
     , mUploadingTexturesCount(0)
-    , mOverrideLocalId(0)
-    , mOverrideFace(0)
 {
     const LLInventoryItem* item = getItem();
     if (item)
@@ -1401,6 +1401,35 @@ void LLMaterialEditor::loadMaterialFromFile(const std::string& filename, S32 ind
     }
 }
 
+void LLMaterialEditor::loadLiveMaterial(LLUUID &asset_id)
+{
+    LLMaterialEditor* me = (LLMaterialEditor*)LLFloaterReg::getInstance("material_editor", LLSD(LIVE_MATERIAL_EDITOR_KEY));
+    me->setTitle(me->getString("material_override_title"));
+    me->setAssetId(asset_id);
+    if (asset_id.notNull())
+    {
+        me->setFromGLTFMaterial(gGLTFMaterialList.getMaterial(asset_id));
+    }
+    me->openFloater();
+    me->setFocus(TRUE);
+}
+
+void LLMaterialEditor::loadFromGLTFMaterial(LLUUID &asset_id)
+{
+    if (asset_id.isNull())
+    {
+        LL_WARNS() << "Trying to open material with null id" << LL_ENDL;
+        return;
+    }
+    LLMaterialEditor* me = (LLMaterialEditor*)LLFloaterReg::getInstance("material_editor");
+    me->mMaterialName = LLTrans::getString("New Material");
+    me->setTitle(me->mMaterialName);
+    me->setHasUnsavedChanges(true);
+    me->setFromGLTFMaterial(gGLTFMaterialList.getMaterial(asset_id));
+    me->openFloater();
+    me->setFocus(TRUE);
+}
+
 void LLMaterialEditor::loadMaterial(const tinygltf::Model &model_in, const std::string &filename_lc, S32 index)
 {
     if (model_in.materials.size() <= index)
@@ -1810,15 +1839,15 @@ void LLMaterialEditor::importMaterial()
         true);
 }
 
-class LLRemderMaterialFunctor : public LLSelectedTEFunctor
+class LLRenderMaterialFunctor : public LLSelectedTEFunctor
 {
 public:
-    LLRemderMaterialFunctor(const LLUUID &id)
+    LLRenderMaterialFunctor(const LLUUID &id)
         : mMatId(id)
     {
     }
 
-    virtual bool apply(LLViewerObject* objectp, S32 te)
+    bool apply(LLViewerObject* objectp, S32 te) override
     {
         if (objectp && objectp->permModify() && objectp->getVolume())
         {
@@ -1832,29 +1861,97 @@ private:
     LLUUID mMatId;
 };
 
+class LLRenderMaterialOverrideFunctor : public LLSelectedTEFunctor
+{
+public:
+    LLRenderMaterialOverrideFunctor(LLMaterialEditor * me, std::string const & url, LLUUID const & asset_id)
+    : mEditor(me), mCapUrl(url), mAssetID(asset_id)
+    {
+
+    }
+
+    bool apply(LLViewerObject* objectp, S32 te) override
+    {
+        if (objectp && objectp->permModify() && objectp->getVolume())
+        {
+            //LLVOVolume* vobjp = (LLVOVolume*)objectp;
+            S32 local_id = objectp->getLocalID();
+
+            LLPointer<LLGLTFMaterial> material = new LLGLTFMaterial();
+            LLPointer<LLGLTFMaterial> base;
+            mEditor->getGLTFMaterial(material);
+
+            tinygltf::Model model_out;
+
+            if(mAssetID != LLUUID::null)
+            {
+                base = gGLTFMaterialList.getMaterial(mAssetID);
+                material->writeOverridesToModel(model_out, 0, base);
+            }
+            else
+            {
+                material->writeToModel(model_out, 0);
+            }
+
+            std::string overrides_json;
+            {
+                tinygltf::TinyGLTF gltf;
+                std::ostringstream str;
+
+                gltf.WriteGltfSceneToStream(&model_out, str, false, false);
+
+                overrides_json = str.str();
+                LL_DEBUGS() << "overrides_json " << overrides_json << LL_ENDL;
+            }
+
+            LLSD overrides = llsd::map(
+                "local_id", local_id,
+                "side", te,
+                "overrides", overrides_json
+            );
+            LLCoros::instance().launch("modifyMaterialCoro", std::bind(&LLMaterialEditor::modifyMaterialCoro, mEditor, mCapUrl, overrides));
+        }
+        return true;
+    }
+
+private:
+    LLMaterialEditor * mEditor;
+    std::string mCapUrl;
+    LLUUID mAssetID;
+};
+
 void LLMaterialEditor::applyToSelection()
 {
-#if 0 // local preview placeholder hack
-    // Placehodler. Will be removed once override systems gets finished.
-    LLPointer<LLGLTFMaterial> mat = new LLGLTFMaterial();
-    getGLTFMaterial(mat);
-    const LLUUID placeholder("984e183e-7811-4b05-a502-d79c6f978a98");
-    gGLTFMaterialList.addMaterial(placeholder, mat);
-    LLRemderMaterialFunctor mat_func(placeholder);
-    LLObjectSelectionHandle selected_objects = LLSelectMgr::getInstance()->getSelection();
-    //selected_objects->applyToTEs(&mat_func);
-#else 
+    if (!mKey.isUUID() || mKey.asUUID() != LIVE_MATERIAL_EDITOR_KEY)
+    {
+        // Only apply if working with 'live' materials
+        // Might need a better way to distinguish 'live' mode.
+        // But only one live edit is supposed to work at a time
+        // as a pair to tools floater.
+        return;
+    }
+
     std::string url = gAgent.getRegionCapability("ModifyMaterialParams");
     if (!url.empty())
     {
-        LLSDMap overrides;
-        LLCoros::instance().launch("modifyMaterialCoro", std::bind(&LLMaterialEditor::modifyMaterialCoro, this, url, overrides));
+        LLObjectSelectionHandle selected_objects = LLSelectMgr::getInstance()->getSelection();
+        // TODO figure out how to get the right asset id in cases where we don't have a good one
+        LLRenderMaterialOverrideFunctor override_func(this, url, mAssetID);
+        selected_objects->applyToTEs(&override_func);
     }
     else
     {
         LL_WARNS() << "not connected to materials capable region, missing ModifyMaterialParams cap" << LL_ENDL;
+
+        // Fallback local preview. Will be removed once override systems is finished and new cap is deployed everywhere.
+        LLPointer<LLFetchedGLTFMaterial> mat = new LLFetchedGLTFMaterial();
+        getGLTFMaterial(mat);
+        static const LLUUID placeholder("984e183e-7811-4b05-a502-d79c6f978a98");
+        gGLTFMaterialList.addMaterial(placeholder, mat);
+        LLRenderMaterialFunctor mat_func(placeholder);
+        LLObjectSelectionHandle selected_objects = LLSelectMgr::getInstance()->getSelection();
+        selected_objects->applyToTEs(&mat_func);
     }
-#endif
 }
 
 void LLMaterialEditor::getGLTFMaterial(LLGLTFMaterial* mat)
@@ -2258,13 +2355,10 @@ void LLMaterialEditor::modifyMaterialCoro(std::string cap_url, LLSD overrides)
     LLCore::HttpHeaders::ptr_t httpHeaders;
 
     httpOpts->setFollowRedirects(true);
-    LLSD body = llsd::map(
-        "local_id", S32(mOverrideLocalId),
-        "face", mOverrideFace,
-        "overrides", overrides
-    );
 
-    LLSD result = httpAdapter->postAndSuspend(httpRequest, cap_url, body, httpOpts, httpHeaders);
+    LL_DEBUGS() << "Applying override via ModifyMaterialParams cap: " << overrides << LL_ENDL;
+
+    LLSD result = httpAdapter->postAndSuspend(httpRequest, cap_url, overrides, httpOpts, httpHeaders);
 
     LLSD httpResults = result[LLCoreHttpUtil::HttpCoroutineAdapter::HTTP_RESULTS];
     LLCore::HttpStatus status = LLCoreHttpUtil::HttpCoroutineAdapter::getStatusFromLLSD(httpResults);
@@ -2277,10 +2371,4 @@ void LLMaterialEditor::modifyMaterialCoro(std::string cap_url, LLSD overrides)
     {
         LL_WARNS() << "Failed to modify material: " << result["message"] << LL_ENDL;
     }
-}
-
-void LLMaterialEditor::setOverrideTarget(U32 local_id, S32 face)
-{
-    mOverrideLocalId = local_id;
-    mOverrideFace = face;
 }

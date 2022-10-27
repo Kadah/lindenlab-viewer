@@ -737,7 +737,7 @@ void LLPipeline::allocatePhysicsBuffer()
 
 	if (mPhysicsDisplay.getWidth() != resX || mPhysicsDisplay.getHeight() != resY)
 	{
-		mPhysicsDisplay.allocate(resX, resY, GL_RGBA, TRUE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE);
+		mPhysicsDisplay.allocate(resX, resY, GL_RGBA, TRUE, FALSE, LLTexUnit::TT_TEXTURE, FALSE);
 	}
 }
 
@@ -831,7 +831,7 @@ bool LLPipeline::allocateScreenBuffer(U32 resX, U32 resY, U32 samples)
 
 	if (RenderUIBuffer)
 	{
-		if (!mRT->uiScreen.allocate(resX,resY, GL_RGBA, FALSE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE))
+		if (!mRT->uiScreen.allocate(resX,resY, GL_RGBA, FALSE, FALSE, LLTexUnit::TT_TEXTURE, FALSE))
 		{
 			return false;
 		}
@@ -845,14 +845,14 @@ bool LLPipeline::allocateScreenBuffer(U32 resX, U32 resY, U32 samples)
 		const U32 occlusion_divisor = 3;
 
 		//allocate deferred rendering color buffers
-		if (!mRT->deferredScreen.allocate(resX, resY, GL_RGBA, TRUE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE, samples)) return false;
-		//if (!mRT->deferredDepth.allocate(resX, resY, 0, TRUE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE, samples)) return false;
-		if (!mRT->occlusionDepth.allocate(resX/occlusion_divisor, resY/occlusion_divisor, 0, TRUE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE, samples)) return false;
+		if (!mRT->deferredScreen.allocate(resX, resY, GL_RGBA, TRUE, FALSE, LLTexUnit::TT_TEXTURE, FALSE, samples)) return false;
+		//if (!mRT->deferredDepth.allocate(resX, resY, 0, TRUE, FALSE, LLTexUnit::TT_TEXTURE, FALSE, samples)) return false;
+		if (!mRT->occlusionDepth.allocate(resX/occlusion_divisor, resY/occlusion_divisor, 0, TRUE, FALSE, LLTexUnit::TT_TEXTURE, FALSE, samples)) return false;
 		if (!addDeferredAttachments(mRT->deferredScreen)) return false;
 	
 		GLuint screenFormat = GL_RGBA16;
         
-		if (!mRT->screen.allocate(resX, resY, screenFormat, FALSE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE, samples)) return false;
+		if (!mRT->screen.allocate(resX, resY, screenFormat, FALSE, FALSE, LLTexUnit::TT_TEXTURE, FALSE, samples)) return false;
 
         mRT->deferredScreen.shareDepthBuffer(mRT->screen);
 
@@ -867,7 +867,7 @@ bool LLPipeline::allocateScreenBuffer(U32 resX, U32 resY, U32 samples)
 		
 		if (shadow_detail > 0 || ssao || RenderDepthOfField || samples > 0)
 		{ //only need mRT->deferredLight for shadows OR ssao OR dof OR fxaa
-			if (!mRT->deferredLight.allocate(resX, resY, GL_RGBA, FALSE, FALSE, LLTexUnit::TT_RECT_TEXTURE, FALSE)) return false;
+			if (!mRT->deferredLight.allocate(resX, resY, GL_RGBA, FALSE, FALSE, LLTexUnit::TT_TEXTURE, FALSE)) return false;
 		}
 		else
 		{
@@ -895,7 +895,7 @@ bool LLPipeline::allocateScreenBuffer(U32 resX, U32 resY, U32 samples)
 		//mRT->deferredDepth.release();
 		mRT->occlusionDepth.release();
 						
-		if (!mRT->screen.allocate(resX, resY, GL_RGBA, TRUE, TRUE, LLTexUnit::TT_RECT_TEXTURE, FALSE)) return false;		
+		if (!mRT->screen.allocate(resX, resY, GL_RGBA, TRUE, TRUE, LLTexUnit::TT_TEXTURE, FALSE)) return false;		
 	}
 	
 	gGL.getTexUnit(0)->disable();
@@ -1620,7 +1620,7 @@ U32 LLPipeline::getPoolTypeFromTE(const LLTextureEntry* te, LLViewerTexture* ima
 	}
 		
 	LLMaterial* mat = te->getMaterialParams().get();
-    LLGLTFMaterial* gltf_mat = te->getGLTFMaterial();
+    LLGLTFMaterial* gltf_mat = te->getGLTFRenderMaterial();
 
 	bool color_alpha = te->getColor().mV[3] < 0.999f;
 	bool alpha = color_alpha;
@@ -2550,7 +2550,7 @@ void LLPipeline::downsampleDepthBuffer(LLRenderTarget& source, LLRenderTarget& d
 	vert[1].set(-1,-3,0);
 	vert[2].set(3,1,0);
 	
-	if (source.getUsage() == LLTexUnit::TT_RECT_TEXTURE)
+	if (source.getUsage() == LLTexUnit::TT_TEXTURE)
 	{
 		shader = &gDownsampleDepthRectProgram;
 		shader->bind();
@@ -3726,15 +3726,26 @@ void LLPipeline::touchTexture(LLViewerTexture* tex, F32 vsize)
 void LLPipeline::touchTextures(LLDrawInfo* info)
 {
     LL_PROFILE_ZONE_SCOPED_CATEGORY_PIPELINE;
-    for (int i = 0; i < info->mTextureList.size(); ++i)
-    {
-        touchTexture(info->mTextureList[i], info->mTextureListVSize[i]);
-    }
 
-    touchTexture(info->mTexture, info->mVSize);
-    touchTexture(info->mSpecularMap, info->mVSize);
-    touchTexture(info->mNormalMap, info->mVSize);
-    touchTexture(info->mEmissiveMap, info->mVSize);
+    auto& mat = info->mGLTFMaterial;
+    if (mat.notNull())
+    {
+        touchTexture(mat->mBaseColorTexture, info->mVSize);
+        touchTexture(mat->mNormalTexture, info->mVSize);
+        touchTexture(mat->mMetallicRoughnessTexture, info->mVSize);
+        touchTexture(mat->mEmissiveTexture, info->mVSize);
+    }
+    else
+    {
+        for (int i = 0; i < info->mTextureList.size(); ++i)
+        {
+            touchTexture(info->mTextureList[i], info->mTextureListVSize[i]);
+        }
+
+        touchTexture(info->mTexture, info->mVSize);
+        touchTexture(info->mSpecularMap, info->mVSize);
+        touchTexture(info->mNormalMap, info->mVSize);
+    }
 }
 
 void LLPipeline::postSort(LLCamera& camera)
@@ -7330,6 +7341,7 @@ void LLPipeline::doResetVertexBuffers(bool forced)
 	mResetVertexBuffers = false;
 
 	mCubeVB = NULL;
+    mDeferredVB = NULL;
 
 	for (LLWorld::region_list_t::const_iterator iter = LLWorld::getInstance()->getRegionList().begin(); 
 			iter != LLWorld::getInstance()->getRegionList().end(); ++iter)
@@ -7363,10 +7375,11 @@ void LLPipeline::doResetVertexBuffers(bool forced)
 		LLPathingLib::getInstance()->cleanupVBOManager();
 	}
 	LLVOPartGroup::destroyGL();
+    gGL.resetVertexBuffer();
 
 	SUBSYSTEM_CLEANUP(LLVertexBuffer);
 	
-	if (LLVertexBuffer::sGLCount > 0)
+	if (LLVertexBuffer::sGLCount != 0)
 	{
 		LL_WARNS() << "VBO wipe failed -- " << LLVertexBuffer::sGLCount << " buffers remaining." << LL_ENDL;
 	}
@@ -7387,6 +7400,10 @@ void LLPipeline::doResetVertexBuffers(bool forced)
 	LLPipeline::sTextureBindTest = gSavedSettings.getBOOL("RenderDebugTextureBind");
 
 	LLVertexBuffer::initClass(LLVertexBuffer::sEnableVBOs, LLVertexBuffer::sDisableVBOMapping);
+    gGL.initVertexBuffer();
+
+    mDeferredVB = new LLVertexBuffer(DEFERRED_VB_MASK, 0);
+    mDeferredVB->allocateBuffer(8, 0, true);
 
 	LLVOPartGroup::restoreGL();
 }
@@ -8665,15 +8682,17 @@ void LLPipeline::renderDeferredLighting()
 
                 LLVector3 gauss[32];  // xweight, yweight, offset
 
+				F32 screenPixelSize = 1.f / screen_target->getWidth();
+
                 for (U32 i = 0; i < kern_length; i++)
                 {
                     gauss[i].mV[0] = llgaussian(x, go.mV[0]);
                     gauss[i].mV[1] = llgaussian(x, go.mV[1]);
                     gauss[i].mV[2] = x;
-                    x += 1.f;
+                    x += screenPixelSize;
                 }
 
-                gDeferredBlurLightProgram.uniform2f(sDelta, 1.f, 0.f);
+                gDeferredBlurLightProgram.uniform2f(sDelta, screenPixelSize, 0.f);
                 gDeferredBlurLightProgram.uniform1f(sDistFactor, dist_factor);
                 gDeferredBlurLightProgram.uniform3fv(sKern, kern_length, gauss[0].mV);
                 gDeferredBlurLightProgram.uniform1f(sKernScale, blur_size * (kern_length / 2.f - 0.5f));

@@ -62,6 +62,7 @@ static BOOL deferred_render = FALSE;
 
 // minimum alpha before discarding a fragment
 static const F32 MINIMUM_ALPHA = 0.004f; // ~ 1/255
+
 // minimum alpha before discarding a fragment when rendering impostors
 static const F32 MINIMUM_IMPOSTOR_ALPHA = 0.1f;
 
@@ -179,7 +180,6 @@ void LLDrawPoolAlpha::renderPostDeferred(S32 pass)
         (LLPipeline::sUnderWaterRender) ? &gDeferredAlphaWaterProgram : &gDeferredAlphaProgram;
     prepare_alpha_shader(simple_shader, false, true, water_sign); //prime simple shader (loads shadow relevant uniforms)
 
-
     LLGLSLShader* materialShader = LLPipeline::sUnderWaterRender ? gDeferredMaterialWaterProgram : gDeferredMaterialProgram;
     for (int i = 0; i < LLMaterial::SHADER_COUNT*2; ++i)
     {
@@ -255,8 +255,14 @@ void LLDrawPoolAlpha::render(S32 pass)
     {
         minimum_alpha = MINIMUM_IMPOSTOR_ALPHA;
     }
+
     prepare_forward_shader(fullbright_shader, minimum_alpha);
     prepare_forward_shader(simple_shader, minimum_alpha);
+
+    for (int i = 0; i < LLMaterial::SHADER_COUNT; ++i)
+    {
+        prepare_forward_shader(LLPipeline::sUnderWaterRender ? &gDeferredMaterialWaterProgram[i] : &gDeferredMaterialProgram[i], minimum_alpha);
+    }
 
     //first pass -- rigged only and drawn to depth buffer
     forwardRender(true);
@@ -675,45 +681,7 @@ void LLDrawPoolAlpha::renderAlpha(U32 mask, bool depth_only, bool rigged)
                         gPipeline.bindDeferredShader(*target_shader);
                     }
 
-                    if (params.mTexture.notNull())
-                    {
-                        gGL.getTexUnit(0)->bindFast(params.mTexture); // diffuse
-                    }
-                    else
-                    {
-                        gGL.getTexUnit(0)->bindFast(LLViewerFetchedTexture::sWhiteImagep);
-                    }
-
-                    if (params.mNormalMap)
-                    {
-                        target_shader->bindTexture(LLShaderMgr::BUMP_MAP, params.mNormalMap);
-                    }
-                    else
-                    {
-                        target_shader->bindTexture(LLShaderMgr::BUMP_MAP, LLViewerFetchedTexture::sFlatNormalImagep);
-                    }
-
-                    if (params.mSpecularMap)
-                    {
-                        target_shader->bindTexture(LLShaderMgr::SPECULAR_MAP, params.mSpecularMap); // PBR linear packed Occlusion, Roughness, Metal.
-                    }
-                    else
-                    {
-                        target_shader->bindTexture(LLShaderMgr::SPECULAR_MAP, LLViewerFetchedTexture::sWhiteImagep);
-                    }
-
-                    if (params.mEmissiveMap)
-                    {
-                        target_shader->bindTexture(LLShaderMgr::EMISSIVE_MAP, params.mEmissiveMap);  // PBR sRGB Emissive
-                    }
-                    else
-                    {
-                        target_shader->bindTexture(LLShaderMgr::EMISSIVE_MAP, LLViewerFetchedTexture::sWhiteImagep);
-                    }
-
-                    target_shader->uniform1f(LLShaderMgr::ROUGHNESS_FACTOR, params.mGLTFMaterial->mRoughnessFactor);
-                    target_shader->uniform1f(LLShaderMgr::METALLIC_FACTOR, params.mGLTFMaterial->mMetallicFactor);
-                    target_shader->uniform3fv(LLShaderMgr::EMISSIVE_COLOR, 1, params.mGLTFMaterial->mEmissiveColor.mV);
+                    params.mGLTFMaterial->bind(target_shader);
                 }
                 else
                 {

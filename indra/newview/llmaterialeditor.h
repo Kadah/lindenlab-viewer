@@ -98,12 +98,14 @@ public:
 
     void getGLTFMaterial(LLGLTFMaterial* mat);
 
-    void setFromGLTFMaterial(LLGLTFMaterial* mat);
-
     void loadAsset() override;
     // @index if -1 and file contains more than one material,
     // will promt to select specific one
     static void loadMaterialFromFile(const std::string& filename, S32 index = -1);
+
+    static void loadLiveMaterial(LLUUID &asset_id);
+
+    static void loadFromGLTFMaterial(LLUUID &asset_id);
 
     static void onLoadComplete(const LLUUID& asset_uuid, LLAssetType::EType type, void* user_data, S32 status, LLExtStat ext_status);
 
@@ -217,9 +219,10 @@ public:
     void loadDefaults();
 
     void modifyMaterialCoro(std::string cap_url, LLSD overrides);
-    void setOverrideTarget(U32 local_id, S32 face_id);
 
 private:
+    void setFromGLTFMaterial(LLGLTFMaterial* mat);
+
     void loadMaterial(const tinygltf::Model &model, const std::string &filename_lc, S32 index);
 
     friend class LLMaterialFilePicker;
@@ -268,8 +271,5 @@ private:
     S32 mExpectedUploadCost;
     std::string mMaterialNameShort;
     std::string mMaterialName;
-
-    U32 mOverrideLocalId;
-    S32 mOverrideFace;
 };
 
