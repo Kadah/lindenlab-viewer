@@ -23,12 +23,15 @@
  * $/LicenseInfo$
  */
 
-uniform sampler2DRect depthMap;
-uniform sampler2DRect normalMap;
-uniform sampler2DRect sceneMap;
+uniform sampler2D depthMap;
+uniform sampler2D normalMap;
+uniform sampler2D sceneMap;
 uniform vec2 screen_res;
 uniform mat4 projection_matrix;
+uniform float zNear;
+uniform float zFar;
 
+uniform mat4 inv_proj;
 // Shamelessly taken from http://casual-effects.blogspot.com/2014/08/screen-space-ray-tracing.html
 // Original paper: https://jcgt.org/published/0003/04/04/
 // By Morgan McGuire and Michael Mara at Williams College 2014
@@ -37,19 +40,24 @@ uniform mat4 projection_matrix;
 
 float distanceSquared(vec2 a, vec2 b) { a -= b; return dot(a, a); }
 
-bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, mat4 proj, float zThickness, 
-                            float nearPlaneZ, float stride, float jitter, const float maxSteps, float maxDistance,
+vec4 getPositionWithDepth(vec2 pos_screen, float depth);
+float linearDepth(float depth, float near, float far);
+float getDepth(vec2 pos_screen);
+float linearDepth01(float d, float znear, float zfar);
+
+bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, float zThickness, 
+                            float stride, float jitter, const float maxSteps, float maxDistance,
                             out vec2 hitPixel, out vec3 hitPoint)
 {
 
     // Clip to the near plane    
-    float rayLength = ((csOrig.z + csDir.z * maxDistance) > nearPlaneZ) ?
-        (nearPlaneZ - csOrig.z) / csDir.z : maxDistance;
+    float rayLength = ((csOrig.z + csDir.z * maxDistance) > -zNear) ?
+        (-zNear - csOrig.z) / csDir.z : maxDistance;
     vec3 csEndPoint = csOrig + csDir * rayLength;
 
     // Project into homogeneous clip space
-    vec4 H0 = proj * vec4(csOrig, 1.0);
-    vec4 H1 = proj * vec4(csEndPoint, 1.0);
+    vec4 H0 = projection_matrix * vec4(csOrig, 1.0);
+    vec4 H1 = projection_matrix * vec4(csEndPoint, 1.0);
     float k0 = 1.0 / H0.w, k1 = 1.0 / H1.w;
 
     // The interpolated homogeneous version of the camera-space points  
@@ -79,42 +87,74 @@ bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, mat4 proj, float zThickness,
     float dk = (k1 - k0) * invdx;
     vec2  dP = vec2(stepDir, delta.y * invdx);
 
+    float strideScalar = 1.0 - min(1.0, -csOrig.z / 100);
+    float pixelStride = 1.0 + strideScalar * stride;
+
     // Scale derivatives by the desired pixel stride and then
     // offset the starting values by the jitter fraction
-    dP *= stride; dQ *= stride; dk *= stride;
+    dP *= pixelStride; dQ *= pixelStride; dk *= pixelStride;
     P0 += dP * jitter; Q0 += dQ * jitter; k0 += dk * jitter;
+    
+    vec2 oneDividedByScreenRes = 1 / screen_res;
+    vec4 pqk = vec4( P0, Q0.z, k0);
+    vec4 dPQK = vec4( dP, dQ.z, dk);
+    bool intersect = false;
+    float zA = 0.0, zB = 0.0, i = 0;
+    for (i = 0; i < maxSteps && intersect == false; i++) {
+        pqk += dPQK;
 
-    // Slide P from P0 to P1, (now-homogeneous) Q from Q0 to Q1, k from k0 to k1
-    vec3 Q = Q0; 
+        zA = zB;
 
-    // Adjust end condition for iteration direction
-    float  end = P1.x * stepDir;
-
-    float k = k0, stepCount = 0.0, prevZMaxEstimate = csOrig.z;
-    float rayZMin = prevZMaxEstimate, rayZMax = prevZMaxEstimate;
-    float sceneZMax = rayZMax + 100;
-    for (vec2 P = P0; 
-         ((P.x * stepDir) <= end) && (stepCount < maxSteps) &&
-         ((rayZMax < sceneZMax - zThickness) || (rayZMin > sceneZMax)) &&
-          (sceneZMax != 0); 
-         P += dP, Q.z += dQ.z, k += dk, ++stepCount) {
-        
-        rayZMin = prevZMaxEstimate;
-        rayZMax = (dQ.z * 0.5 + Q.z) / (dk * 0.5 + k);
-        prevZMaxEstimate = rayZMax;
-        if (rayZMin > rayZMax) { 
-           float t = rayZMin; rayZMin = rayZMax; rayZMax = t;
+        zB = (dPQK.z * 0.5 + pqk.z) / (dPQK.w * 0.5 + pqk.w);
+        if (zB > zA) {
+            float t = zB;
+            zB = zA;
+            zA = t;
         }
 
-        hitPixel = permute ? P.yx : P;
-        // hitPixel.y = screen_res.y - hitPixel.y;
-        // You may need hitPixel.y = screen_res.y - hitPixel.y; here if your vertical axis
-        // is different than ours in screen space
-        sceneZMax = texelFetch(depthMap, ivec2(hitPixel)).r;
+        hitPixel = permute ? pqk.yx : pqk.xy;
+        
+        hitPixel *= oneDividedByScreenRes;
+
+        float depth = linearDepth01(getDepth(hitPixel), zNear, zFar) * -zFar;
+        intersect = zB <= depth;
     }
-    
-    // Advance Q based on the number of steps
-    Q.xy += dQ.xy * stepCount;
-    hitPoint = Q * (1.0 / k);
-    return (rayZMax >= sceneZMax - zThickness) && (rayZMin < sceneZMax);
+
+    if (pixelStride > 1 && intersect == true) {
+        pqk -= dPQK;
+        dPQK /= pixelStride;
+
+        float originalStride = pixelStride * 0.5;
+        float oStride = originalStride;
+
+        zA = pqk.z / pqk.w;
+        zB = zA;
+        for (int j = 0; j < maxSteps; j++) {
+            pqk += dPQK * oStride;
+
+            zA = zB;
+            zB = (dPQK.z * -0.5 + pqk.z) / (dPQK.w * -0.5 + pqk.w);
+
+            if (zB > zA) {
+                float t = zB;
+                zB = zA;
+                zA = t;
+            }
+
+            hitPixel = permute ? pqk.yx : pqk.xy;
+                    hitPixel *= oneDividedByScreenRes;
+
+
+            originalStride *= 0.5;
+
+            float depth = linearDepth01(getDepth(hitPixel), zNear, zFar) * -zFar;
+            stride = zB <= depth ? -originalStride : originalStride;
+        }
+    }
+
+    Q0.xy += dQ.xy * i;
+    Q0.z = pqk.z;
+    hitPoint = Q0 / pqk.w;
+
+    return intersect;
 }

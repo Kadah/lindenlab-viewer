@@ -23,9 +23,9 @@
  * $/LicenseInfo$
  */
 
-uniform sampler2DRect depthMap;
-uniform sampler2DRect normalMap;
-uniform sampler2DRect sceneMap;
+uniform sampler2D depthMap;
+uniform sampler2D normalMap;
+uniform sampler2D sceneMap;
 uniform vec2 screen_res;
 uniform mat4 projection_matrix;
 

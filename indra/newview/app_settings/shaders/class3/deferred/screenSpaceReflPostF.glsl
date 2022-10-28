@@ -41,33 +41,37 @@ uniform float zFar;
 
 VARYING vec2 vary_fragcoord;
 
-uniform sampler2DRect depthMap;
-uniform sampler2DRect normalMap;
-uniform sampler2DRect sceneMap;
-uniform sampler2DRect diffuseRect;
+uniform sampler2D depthMap;
+uniform sampler2D normalMap;
+uniform sampler2D sceneMap;
+uniform sampler2D diffuseRect;
 
 vec3 getNorm(vec2 screenpos);
 float getDepth(vec2 pos_screen);
 float linearDepth(float d, float znear, float zfar);
+float linearDepth01(float d, float znear, float zfar);
+
 vec4 getPositionWithDepth(vec2 pos_screen, float depth);
 vec4 getPosition(vec2 pos_screen);
-bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, mat4 proj, float zThickness, 
-                            float nearPlaneZ, float stride, float jitter, const float maxSteps, float maxDistance,
+bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, float zThickness, 
+                            float stride, float jitter, const float maxSteps, float maxDistance,
                             out vec2 hitPixel, out vec3 hitPoint);
 
 void main() {
-    vec2  tc = vary_fragcoord.xy * screen_res;
-    vec3 pos = getPosition(tc).xyz;
-    vec3 viewPos = normalize(pos);
-    vec3 rayDirection = reflect(getNorm(tc), viewPos);
+    vec2  tc = vary_fragcoord.xy;
+    float depth = linearDepth01(getDepth(tc), zNear, zFar);
+    vec3 pos = getPositionWithDepth(tc, getDepth(tc)).xyz;
+    vec4 rayOrig = inv_proj * vec4(tc * 2.0 - 1.0, 1, 1);
+    vec3 viewPos = rayOrig.xyz / rayOrig.w * depth;
+    vec3 rayDirection = normalize(reflect(normalize(viewPos), getNorm(tc)));
     vec2 hitpixel;
-    vec3 hitpoint = viewPos;
-    bool hit = traceScreenSpaceRay1(pos, rayDirection, projection_matrix,1, zNear, 1, 4, 20, 5, hitpixel, hitpoint);
+    vec3 hitpoint;
+    bool hit = traceScreenSpaceRay1(viewPos, rayDirection, 1, 1, 0, 20, 10, hitpixel, hitpoint);
     
     if (hit) {
-        frag_color.rgb = vec3(hitpixel.x, hitpixel.y, 0);
+        frag_color.rgb = texture2D(diffuseRect, hitpixel).rgb;
     } else {
-        frag_color.rgb = vec3(tc.x, tc.y, 0);
+        frag_color.rgb = viewPos;
     }
 
     frag_color.a = 1.0;
