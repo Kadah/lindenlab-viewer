@@ -41,16 +41,17 @@ uniform float zFar;
 
 VARYING vec2 vary_fragcoord;
 
-uniform sampler2DRect depthMap;
-uniform sampler2DRect normalMap;
-uniform sampler2DRect sceneMap;
+uniform sampler2D depthMap;
+uniform sampler2D normalMap;
+uniform sampler2D sceneMap;
+uniform sampler2D diffuseRect;
 
 vec3 getNorm(vec2 screenpos);
 float getDepth(vec2 pos_screen);
 float linearDepth(float d, float znear, float zfar);
 
 void main() {
-    vec2  tc = vary_fragcoord.xy * screen_res;
+    vec2  tc = vary_fragcoord.xy;
     vec4 pos = getPositionWithDepth(tc, getDepth(tc));
     frag_color = pos;
 }

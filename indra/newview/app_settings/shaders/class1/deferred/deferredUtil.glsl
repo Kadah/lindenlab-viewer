@@ -184,6 +184,11 @@ float linearDepth(float d, float znear, float zfar)
     return znear * 2.0 * zfar / (zfar + znear - d * (zfar - znear));
 }
 
+float linearDepth01(float d, float znear, float zfar)
+{
+    return linearDepth(d, znear, zfar) / zfar;
+}
+
 float getDepth(vec2 pos_screen)
 {
     float depth = texture2D(depthMap, pos_screen).r;
