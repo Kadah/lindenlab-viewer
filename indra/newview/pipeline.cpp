@@ -398,7 +398,6 @@ void LLPipeline::connectRefreshCachedSettingsSafe(const std::string name)
 
 void LLPipeline::init()
 {
-    LL_WARNS() << "Begin pipeline initialization" << LL_ENDL; // TODO: Remove after testing
 	refreshCachedSettings();
 
     mRT = &mMainRT;
@@ -417,7 +416,6 @@ void LLPipeline::init()
 	mInitialized = true;
 	
 	stop_glerror();
-    LL_WARNS() << "No GL errors yet. Pipeline initialization will continue." << LL_ENDL; // TODO: Remove after testing
 
 	//create render pass pools
 	getPool(LLDrawPool::POOL_ALPHA_PRE_WATER);
@@ -431,7 +429,7 @@ void LLPipeline::init()
 	getPool(LLDrawPool::POOL_BUMP);
 	getPool(LLDrawPool::POOL_MATERIALS);
 	getPool(LLDrawPool::POOL_GLOW);
-	getPool(LLDrawPool::POOL_PBR_OPAQUE);
+	getPool(LLDrawPool::POOL_GLTF_PBR);
 
 	resetFrameStats();
 
@@ -480,9 +478,7 @@ void LLPipeline::init()
 	
 	// Enable features
 		
-    LL_WARNS() << "Shader initialization start" << LL_ENDL; // TODO: Remove after testing
 	LLViewerShaderMgr::instance()->setShaders();
-    LL_WARNS() << "Shader initialization end" << LL_ENDL; // TODO: Remove after testing
 
 	stop_glerror();
 
@@ -1575,7 +1571,7 @@ LLDrawPool *LLPipeline::findPool(const U32 type, LLViewerTexture *tex0)
 		poolp = mWLSkyPool;
 		break;
 
-	case LLDrawPool::POOL_PBR_OPAQUE:
+	case LLDrawPool::POOL_GLTF_PBR:
 		poolp = mPBROpaquePool;
 		break;
 
@@ -1656,7 +1652,7 @@ U32 LLPipeline::getPoolTypeFromTE(const LLTextureEntry* te, LLViewerTexture* ima
 	}
     else if (gltf_mat)
     {
-        return LLDrawPool::POOL_PBR_OPAQUE;
+        return LLDrawPool::POOL_GLTF_PBR;
     }
 	else if (mat && !alpha)
 	{
@@ -5784,7 +5780,7 @@ void LLPipeline::addToQuickLookup( LLDrawPool* new_poolp )
 		}
 		break;
 
-    case LLDrawPool::POOL_PBR_OPAQUE:
+    case LLDrawPool::POOL_GLTF_PBR:
         if( mPBROpaquePool )
         {
             llassert(0);
@@ -5917,7 +5913,7 @@ void LLPipeline::removeFromQuickLookup( LLDrawPool* poolp )
 		mGroundPool = NULL;
 		break;
 
-    case LLDrawPool::POOL_PBR_OPAQUE:
+    case LLDrawPool::POOL_GLTF_PBR:
         llassert( poolp == mPBROpaquePool );
         mPBROpaquePool = NULL;
         break;
@@ -6157,7 +6153,7 @@ void LLPipeline::calcNearbyLights(LLCamera& camera)
 				
 		// FIND NEW LIGHTS THAT ARE IN RANGE
 		light_set_t new_nearby_lights;
-		for (LLDrawable::drawable_set_t::iterator iter = mLights.begin();
+		for (LLDrawable::ordered_drawable_set_t::iterator iter = mLights.begin();
 			 iter != mLights.end(); ++iter)
 		{
 			LLDrawable* drawable = *iter;
@@ -9685,7 +9681,6 @@ void LLPipeline::renderShadow(glh::matrix4f& view, glh::matrix4f& proj, LLCamera
                 renderMaskedObjects(LLRenderPass::PASS_MATERIAL_ALPHA_MASK, no_idx_mask, true, false, rigged);
                 renderMaskedObjects(LLRenderPass::PASS_SPECMAP_MASK, no_idx_mask, true, false, rigged);
                 renderMaskedObjects(LLRenderPass::PASS_NORMMAP_MASK, no_idx_mask, true, false, rigged);
-                renderMaskedObjects(LLRenderPass::PASS_PBR_OPAQUE, no_idx_mask, true, false, rigged);
             }
         }
     }
@@ -10024,6 +10019,7 @@ void LLPipeline::generateSunShadow(LLCamera& camera)
                     LLPipeline::RENDER_TYPE_ALPHA_PRE_WATER,
                     LLPipeline::RENDER_TYPE_ALPHA_POST_WATER,
 					LLPipeline::RENDER_TYPE_GRASS,
+                    LLPipeline::RENDER_TYPE_GLTF_PBR,
 					LLPipeline::RENDER_TYPE_FULLBRIGHT,
 					LLPipeline::RENDER_TYPE_BUMP,
 					LLPipeline::RENDER_TYPE_VOLUME,
@@ -10081,8 +10077,8 @@ void LLPipeline::generateSunShadow(LLCamera& camera)
                     LLPipeline::RENDER_TYPE_PASS_NORMSPEC_BLEND_RIGGED,
                     LLPipeline::RENDER_TYPE_PASS_NORMSPEC_MASK_RIGGED,
                     LLPipeline::RENDER_TYPE_PASS_NORMSPEC_EMISSIVE_RIGGED,
-                    LLPipeline::RENDER_TYPE_PASS_PBR_OPAQUE,
-                    LLPipeline::RENDER_TYPE_PASS_PBR_OPAQUE_RIGGED,
+                    LLPipeline::RENDER_TYPE_PASS_GLTF_PBR,
+                    LLPipeline::RENDER_TYPE_PASS_GLTF_PBR_RIGGED,
 					END_RENDER_TYPES);
 
 	gGL.setColorMask(false, false);
