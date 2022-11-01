@@ -8349,14 +8349,6 @@ void LLPipeline::bindDeferredShader(LLGLSLShader& shader, LLRenderTarget* light_
         stop_glerror();
     }
 #endif
-		
-    glh::matrix4f projection = get_current_projection();
-		glh::matrix4f inv_proj = projection.inverse();
-		
-    if (shader.getUniformLocation(LLShaderMgr::INVERSE_PROJECTION_MATRIX) != -1)
-    {
-		shader.uniformMatrix4fv(LLShaderMgr::INVERSE_PROJECTION_MATRIX, 1, FALSE, inv_proj.m);
-    }
 
     if (shader.getUniformLocation(LLShaderMgr::VIEWPORT) != -1)
     {
@@ -8589,6 +8581,8 @@ LLVector4 pow4fsrgb(LLVector4 v, F32 f)
 
 void LLPipeline::renderDeferredLighting()
 {
+
+
     LL_PROFILE_ZONE_SCOPED_CATEGORY_PIPELINE;
     LL_PROFILE_GPU_ZONE("renderDeferredLighting");
     if (!sCull)
@@ -8836,19 +8830,11 @@ void LLPipeline::renderDeferredLighting()
                 LLGLDisable   test(GL_ALPHA_TEST);
 
                 // full screen blit
-                gGL.pushMatrix();
-                gGL.loadIdentity();
-                gGL.matrixMode(LLRender::MM_PROJECTION);
-                gGL.pushMatrix();
-                gGL.loadIdentity();
 
                 mDeferredVB->setBuffer(LLVertexBuffer::MAP_VERTEX);
 
                 mDeferredVB->drawArrays(LLRender::TRIANGLES, 0, 3);
 
-                gGL.popMatrix();
-                gGL.matrixMode(LLRender::MM_MODELVIEW);
-                gGL.popMatrix();
             }
 
             unbindDeferredShader(LLPipeline::sUnderWaterRender ? gDeferredSoftenWaterProgram : gDeferredSoftenProgram);
@@ -9050,12 +9036,6 @@ void LLPipeline::renderDeferredLighting()
                 LL_PROFILE_ZONE_NAMED_CATEGORY_PIPELINE("renderDeferredLighting - fullscreen lights");
                 LLGLDepthTest depth(GL_FALSE);
                 LL_PROFILE_GPU_ZONE("fullscreen lights");
-                // full screen blit
-                gGL.pushMatrix();
-                gGL.loadIdentity();
-                gGL.matrixMode(LLRender::MM_PROJECTION);
-                gGL.pushMatrix();
-                gGL.loadIdentity();
 
                 U32 count = 0;
 
@@ -9124,10 +9104,6 @@ void LLPipeline::renderDeferredLighting()
 
                 gDeferredMultiSpotLightProgram.disableTexture(LLShaderMgr::DEFERRED_PROJECTION);
                 unbindDeferredShader(gDeferredMultiSpotLightProgram);
-
-                gGL.popMatrix();
-                gGL.matrixMode(LLRender::MM_MODELVIEW);
-                gGL.popMatrix();
             }
         }
 
