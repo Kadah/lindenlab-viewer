@@ -23,8 +23,6 @@
  * $/LicenseInfo$
  */
 
-uniform mat4 identity_matrix;
-
 ATTRIBUTE vec3 position;
 
 VARYING vec2 vary_fragcoord;
@@ -37,7 +35,7 @@ uniform vec2 screen_res;
 void main()
 {
 	//transform vertex
-	vec4 pos = identity_matrix * vec4(position.xyz, 1.0);
+	vec4 pos = vec4(position.xyz, 1.0);
 	gl_Position = pos;	
 	vary_tc = (pos.xy*0.5+0.5)*tc_scale;
 	vary_fragcoord = (pos.xy*0.5+0.5);
