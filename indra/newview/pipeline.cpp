@@ -8622,12 +8622,6 @@ void LLPipeline::renderDeferredLighting()
         mat.mult_matrix_vec(tc_moon);
         mTransformedMoonDir.set(tc_moon.v);
 
-        gGL.pushMatrix();
-        gGL.loadIdentity();
-        gGL.matrixMode(LLRender::MM_PROJECTION);
-        gGL.pushMatrix();
-        gGL.loadIdentity();
-
         if (RenderDeferredSSAO || RenderShadowDetail > 0)
         {
             LL_PROFILE_GPU_ZONE("sun program");
@@ -8754,14 +8748,6 @@ void LLPipeline::renderDeferredLighting()
                 unbindDeferredShader(gDeferredBlurLightProgram);
             }
         }
-
-        stop_glerror();
-        gGL.popMatrix();
-        stop_glerror();
-        gGL.matrixMode(LLRender::MM_MODELVIEW);
-        stop_glerror();
-        gGL.popMatrix();
-        stop_glerror();
 
         screen_target->bindTarget();
         // clear color buffer here - zeroing alpha (glow) is important or it will accumulate against sky
