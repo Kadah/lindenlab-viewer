@@ -23,7 +23,7 @@
  * $/LicenseInfo$
  */
 
-uniform mat4 modelview_projection_matrix;
+uniform mat4 identity_matrix;
 
 ATTRIBUTE vec3 position;
 
@@ -38,7 +38,7 @@ void setAdditiveColor(vec3 c);
 void main()
 {
 	//transform vertex
-	vec4 pos = modelview_projection_matrix * vec4(position.xyz, 1.0);
+	vec4 pos = identity_matrix * vec4(position.xyz, 1.0);
 	gl_Position = pos; 
 
     // appease OSX GLSL compiler/linker by touching all the varyings we said we would

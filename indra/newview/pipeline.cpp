@@ -7576,13 +7576,6 @@ void LLPipeline::renderFinalize()
 
     enableLightsFullbright();
 
-    gGL.matrixMode(LLRender::MM_PROJECTION);
-    gGL.pushMatrix();
-    gGL.loadIdentity();
-    gGL.matrixMode(LLRender::MM_MODELVIEW);
-    gGL.pushMatrix();
-    gGL.loadIdentity();
-
     LLGLDisable test(GL_ALPHA_TEST);
 
     gGL.setColorMask(true, true);
@@ -7603,13 +7596,6 @@ void LLPipeline::renderFinalize()
 
             // Make sure the deferred VB is a full screen triangle.
             mDeferredVB->getVertexStrider(vert);
-
-            // Make sure we have the correct matrix setup here.
-            gGL.pushMatrix();
-            gGL.loadIdentity();
-            gGL.matrixMode(LLRender::MM_PROJECTION);
-            gGL.pushMatrix();
-            gGL.loadIdentity();
 
             bindDeferredShader(gPostScreenSpaceReflectionProgram, NULL);
             mDeferredVB->setBuffer(LLVertexBuffer::MAP_VERTEX);
@@ -7652,18 +7638,9 @@ void LLPipeline::renderFinalize()
             unbindDeferredShader(gPostScreenSpaceReflectionProgram);
 
             screen_target->flush();
-            gGL.popMatrix();
-            gGL.matrixMode(LLRender::MM_MODELVIEW);
-            gGL.popMatrix();
         }
 
         // gamma correct lighting
-        gGL.matrixMode(LLRender::MM_PROJECTION);
-        gGL.pushMatrix();
-        gGL.loadIdentity();
-        gGL.matrixMode(LLRender::MM_MODELVIEW);
-        gGL.pushMatrix();
-        gGL.loadIdentity();
 
         {
             LL_PROFILE_GPU_ZONE("gamma correct");
@@ -7708,11 +7685,6 @@ void LLPipeline::renderFinalize()
             gDeferredPostGammaCorrectProgram.unbind();
             screen_target->flush();
         }
-
-        gGL.matrixMode(LLRender::MM_PROJECTION);
-        gGL.popMatrix();
-        gGL.matrixMode(LLRender::MM_MODELVIEW);
-        gGL.popMatrix();
 
         LLVertexBuffer::unbind();
 
@@ -8277,11 +8249,6 @@ void LLPipeline::renderFinalize()
                                                   mRT->screen.getWidth(), mRT->screen.getHeight(),
                                                   GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT, GL_NEAREST);
     }*/
-
-    gGL.matrixMode(LLRender::MM_PROJECTION);
-    gGL.popMatrix();
-    gGL.matrixMode(LLRender::MM_MODELVIEW);
-    gGL.popMatrix();
 
     LLVertexBuffer::unbind();
 

@@ -25,13 +25,16 @@
 
 uniform mat4 modelview_projection_matrix;
 
+uniform mat4 identity_matrix;
+
+
 ATTRIBUTE vec3 position;
 
 VARYING vec2 vary_tc;
 
 void main()
 {
-	vec4 pos = modelview_projection_matrix*vec4(position.xyz, 1.0);
+	vec4 pos = identity_matrix*vec4(position.xyz, 1.0);
 	gl_Position = pos;
 
 	vary_tc = pos.xy*0.5+0.5;
