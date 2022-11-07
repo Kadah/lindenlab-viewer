@@ -93,14 +93,14 @@ void main()
 		{
 			while (sc > 0.5)
 			{
-				int its = int(max(1.0,(sc*3.7)));
+				int its = int(max(1.0,(sc*3.7)));	
 				for (int i=0; i<its; ++i)
 				{
 					float ang = sc+i*2*PI/its; // sc is added for rotary perturbance
 					float samp_x = sc*sin(ang);
 					float samp_y = sc*cos(ang);
 					// you could test sample coords against an interesting non-circular aperture shape here, if desired.
-					dofSampleNear(diff, w, sc, vary_fragcoord.xy + vec2(samp_x,samp_y));
+					dofSampleNear(diff, w, sc, vary_fragcoord.xy + (vec2(samp_x,samp_y) / screen_res));
 				}
 				sc -= 1.0;
 			}
@@ -117,7 +117,7 @@ void main()
 					float samp_x = sc*sin(ang);
 					float samp_y = sc*cos(ang);
 					// you could test sample coords against an interesting non-circular aperture shape here, if desired.
-					dofSample(diff, w, sc, vary_fragcoord.xy + vec2(samp_x,samp_y));
+					dofSample(diff, w, sc, vary_fragcoord.xy + (vec2(samp_x,samp_y) / screen_res));
 				}
 				sc -= 1.0;
 			}
@@ -125,6 +125,6 @@ void main()
 
 		diff /= w;
 	}
-		
+	
 	frag_color = diff;
 }

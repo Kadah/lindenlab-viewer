@@ -69,10 +69,10 @@ void main()
 		float sc = a/res_scale;
 		
 		vec4 col;
-		col = texture2D(lightMap, vary_fragcoord.xy+vec2(sc,sc));
-		col += texture2D(lightMap, vary_fragcoord.xy+vec2(-sc,sc));
-		col += texture2D(lightMap, vary_fragcoord.xy+vec2(sc,-sc));
-		col += texture2D(lightMap, vary_fragcoord.xy+vec2(-sc,-sc));
+		col = texture2D(lightMap, vary_fragcoord.xy+vec2(sc,sc)/screen_res);
+		col += texture2D(lightMap, vary_fragcoord.xy+vec2(-sc,sc)/screen_res);
+		col += texture2D(lightMap, vary_fragcoord.xy+vec2(sc,-sc)/screen_res);
+		col += texture2D(lightMap, vary_fragcoord.xy+vec2(-sc,-sc)/screen_res);
 		
 		diff = mix(diff, col*0.25, a);
 	}

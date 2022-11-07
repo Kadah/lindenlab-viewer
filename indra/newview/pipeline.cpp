@@ -8038,8 +8038,8 @@ void LLPipeline::renderFinalize()
 
                 shader->uniform1f(LLShaderMgr::DOF_MAX_COF, CameraMaxCoF);
                 shader->uniform1f(LLShaderMgr::DOF_RES_SCALE, CameraDoFResScale);
-                shader->uniform1f(LLShaderMgr::DOF_WIDTH, dof_width - 1);
-                shader->uniform1f(LLShaderMgr::DOF_HEIGHT, dof_height - 1);
+                shader->uniform1f(LLShaderMgr::DOF_WIDTH, (dof_width - 1) / (F32)mRT->screen.getWidth());
+                shader->uniform1f(LLShaderMgr::DOF_HEIGHT, (dof_height - 1) / (F32)mRT->screen.getHeight());
 
                 gGL.begin(LLRender::TRIANGLE_STRIP);
                 gGL.texCoord2f(tc1.mV[0], tc1.mV[1]);
