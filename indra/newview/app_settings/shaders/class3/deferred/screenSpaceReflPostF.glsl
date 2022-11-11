@@ -40,6 +40,7 @@ uniform float zNear;
 uniform float zFar;
 
 VARYING vec2 vary_fragcoord;
+VARYING vec3 camera_ray;
 
 uniform sampler2D depthMap;
 uniform sampler2D normalMap;
@@ -53,26 +54,45 @@ float linearDepth01(float d, float znear, float zfar);
 
 vec4 getPositionWithDepth(vec2 pos_screen, float depth);
 vec4 getPosition(vec2 pos_screen);
-bool traceScreenSpaceRay1(vec3 csOrig, vec3 csDir, float zThickness, 
-                            float stride, float jitter, const float maxSteps, float maxDistance,
-                            out vec2 hitPixel, out vec3 hitPoint);
 
+bool traceScreenRay(vec3 position, vec3 reflection, out vec3 hitColor, out float hitDepth, float depth, sampler2D textureFrame);
+float random (vec2 uv);
 void main() {
     vec2  tc = vary_fragcoord.xy;
     float depth = linearDepth01(getDepth(tc), zNear, zFar);
     vec3 pos = getPositionWithDepth(tc, getDepth(tc)).xyz;
-    vec4 rayOrig = inv_proj * vec4(tc * 2.0 - 1.0, 1, 1);
-    vec3 viewPos = rayOrig.xyz / rayOrig.w * depth;
-    vec3 rayDirection = normalize(reflect(normalize(viewPos), getNorm(tc)));
+    vec3 viewPos = camera_ray * depth;
+    vec3 rayDirection = normalize(reflect(normalize(viewPos), getNorm(tc))) * -viewPos.z;
     vec2 hitpixel;
     vec3 hitpoint;
-    bool hit = traceScreenSpaceRay1(viewPos, rayDirection, 1, 1, 0, 20, 10, hitpixel, hitpoint);
+
+	vec2 uv2 = tc * screen_res;
+	float c = (uv2.x + uv2.y) * 0.125;
+	float jitter = mod( c, 1.0);
+
+    vec3 firstBasis = normalize(cross(vec3(0.f, 0.f, 1.f), rayDirection));
+	vec3 secondBasis = normalize(cross(rayDirection, firstBasis));
     
-    if (hit) {
-        frag_color.rgb = texture2D(diffuseRect, hitpixel).rgb;
-    } else {
-        frag_color.rgb = viewPos;
-    }
+    frag_color.rgb = texture(diffuseRect, tc).rgb;
+    vec4 collectedColor;
+    for (int i = 0; i < 1; i++) {
+		vec2 coeffs = vec2(random(tc + vec2(0, i)) + random(tc + vec2(i, 0))) * 0.25;
+		vec3 reflectionDirectionRandomized = rayDirection + firstBasis * coeffs.x + secondBasis * coeffs.y;
+
+        bool hit = traceScreenRay(pos, reflectionDirectionRandomized, hitpoint, depth, depth, diffuseRect);
+        if (hit) {
+            vec2 screenpos = tc * 2 - 1;
+            float vignette = 1;// clamp((1 - dot(screenpos, screenpos)) * 4,0, 1);
+            vignette *= dot(normalize(viewPos), getNorm(tc)) * 0.5 + 0.5;
+            vignette *= min(linearDepth(getDepth(tc), zNear, zFar) / (zFar * 0.0125), 1);
+            collectedColor.rgb = hitpoint * vignette * 0.25;
+            frag_color.rgb = hitpoint;
+        }
+	}
+
+    //frag_color.rgb = collectedColor.rgb;
+
+
 
     frag_color.a = 1.0;
 }
