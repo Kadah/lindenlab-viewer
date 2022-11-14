@@ -160,11 +160,12 @@ public:
 
 	//WARNING -- when updating these enums you MUST 
 	// 1 - update LLVertexBuffer::sTypeSize
-	// 2 - add a strider accessor
-	// 3 - modify LLVertexBuffer::setupVertexBuffer
-	// 4 - modify LLVertexBuffer::setupClientArray
-	// 5 - modify LLViewerShaderMgr::mReservedAttribs
-	// 6 - update LLVertexBuffer::setupVertexArray
+    // 2 - update LLVertexBuffer::vb_type_name
+	// 3 - add a strider accessor
+	// 4 - modify LLVertexBuffer::setupVertexBuffer
+    // 5 - modify LLVertexBuffer::setupVertexBufferFast
+	// 6 - modify LLViewerShaderMgr::mReservedAttribs
+	// 7 - update LLVertexBuffer::setupVertexArray
 
     // clang-format off
     enum {                      // Shader attribute name, set in LLShaderMgr::initAttribsAndUniforms()
@@ -195,7 +196,6 @@ public:
 		MAP_TEXCOORD3 = (1<<TYPE_TEXCOORD3),
 		MAP_COLOR = (1<<TYPE_COLOR),
 		MAP_EMISSIVE = (1<<TYPE_EMISSIVE),
-		// These use VertexAttribPointer and should possibly be made generic
 		MAP_TANGENT = (1<<TYPE_TANGENT),
 		MAP_WEIGHT = (1<<TYPE_WEIGHT),
 		MAP_WEIGHT4 = (1<<TYPE_WEIGHT4),
@@ -269,6 +269,10 @@ public:
 	bool getWeightStrider(LLStrider<F32>& strider, S32 index=0, S32 count = -1, bool map_range = false);
 	bool getWeight4Strider(LLStrider<LLVector4>& strider, S32 index=0, S32 count = -1, bool map_range = false);
 	bool getClothWeightStrider(LLStrider<LLVector4>& strider, S32 index=0, S32 count = -1, bool map_range = false);
+    bool getBasecolorTexcoordStrider(LLStrider<LLVector2>& strider, S32 index=0, S32 count = -1, bool map_range = false);
+    bool getNormalTexcoordStrider(LLStrider<LLVector2>& strider, S32 index=0, S32 count = -1, bool map_range = false);
+    bool getMetallicRoughnessTexcoordStrider(LLStrider<LLVector2>& strider, S32 index=0, S32 count = -1, bool map_range = false);
+    bool getEmissiveTexcoordStrider(LLStrider<LLVector2>& strider, S32 index=0, S32 count = -1, bool map_range = false);
 	
 
 	bool useVBOs() const;

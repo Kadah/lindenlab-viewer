@@ -1186,7 +1186,11 @@ void LLShaderMgr::initAttribsAndUniforms()
 	mReservedUniforms.push_back("texture_matrix3");
 	mReservedUniforms.push_back("object_plane_s");
 	mReservedUniforms.push_back("object_plane_t");
-	llassert(mReservedUniforms.size() == LLShaderMgr::OBJECT_PLANE_T+1);
+    mReservedUniforms.push_back("texture_basecolor_matrix"); // GLTF
+    mReservedUniforms.push_back("texture_normal_matrix"); // GLTF
+    mReservedUniforms.push_back("texture_metallic_roughness_matrix"); // GLTF
+    mReservedUniforms.push_back("texture_emissive_matrix"); // GLTF
+    llassert(mReservedUniforms.size() == LLShaderMgr::TEXTURE_EMISSIVE_MATRIX+1);
 
 	mReservedUniforms.push_back("viewport");
 

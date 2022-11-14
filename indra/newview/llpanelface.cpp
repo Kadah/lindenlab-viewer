@@ -203,6 +203,7 @@ BOOL	LLPanelFace::postBuild()
 	childSetAction("button align textures", &LLPanelFace::onAlignTexture, this);
     childSetAction("pbr_from_inventory", &LLPanelFace::onClickBtnLoadInvPBR, this);
     childSetAction("edit_selected_pbr", &LLPanelFace::onClickBtnEditPBR, this);
+    childSetAction("save_selected_pbr", &LLPanelFace::onClickBtnSavePBR, this);
 
 	LLTextureCtrl*	mTextureCtrl;
 	LLTextureCtrl*	mShinyTextureCtrl;
@@ -969,6 +970,7 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
         }
         getChildView("pbr_from_inventory")->setEnabled(editable);
         getChildView("edit_selected_pbr")->setEnabled(editable && has_pbr_material);
+        getChildView("save_selected_pbr")->setEnabled(objectp->permCopy() && has_pbr_material);
 
 		LLTextureCtrl*	texture_ctrl = getChild<LLTextureCtrl>("texture control");
 		LLTextureCtrl*	shinytexture_ctrl = getChild<LLTextureCtrl>("shinytexture control");
@@ -995,9 +997,9 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
             color_swatch->setOriginal(color);
             color_swatch->set(color, force_set_values || (prev_color != color) || !editable);
 
-            color_swatch->setValid(editable);
-            color_swatch->setEnabled( editable );
-            color_swatch->setCanApplyImmediately( editable );
+            color_swatch->setValid(editable && !has_pbr_material);
+            color_swatch->setEnabled( editable && !has_pbr_material);
+            color_swatch->setCanApplyImmediately( editable && !has_pbr_material);
 		}
 
 		// Color transparency
@@ -1140,11 +1142,11 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
 			updateAlphaControls();
 
 			if (texture_ctrl)
-				{
+			{
 				if (identical_diffuse)
 				{
 					texture_ctrl->setTentative(FALSE);
-					texture_ctrl->setEnabled(editable);
+					texture_ctrl->setEnabled(editable && !has_pbr_material);
 					texture_ctrl->setImageAssetID(id);
 					getChildView("combobox alphamode")->setEnabled(editable && mIsAlpha && transparency <= 0.f && !has_pbr_material);
 					getChildView("label alphamode")->setEnabled(editable && mIsAlpha && !has_pbr_material);
@@ -1154,7 +1156,7 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
 					texture_ctrl->setBakeTextureEnabled(TRUE);
 				}
 				else if (id.isNull())
-					{
+				{
 						// None selected
 					texture_ctrl->setTentative(FALSE);
 					texture_ctrl->setEnabled(FALSE);
@@ -1165,12 +1167,12 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
 					getChildView("label maskcutoff")->setEnabled(FALSE);
 
 					texture_ctrl->setBakeTextureEnabled(false);
-					}
-					else
-					{
+				}
+				else
+				{
 						// Tentative: multiple selected with different textures
 					texture_ctrl->setTentative(TRUE);
-					texture_ctrl->setEnabled(editable);
+					texture_ctrl->setEnabled(editable && !has_pbr_material);
 					texture_ctrl->setImageAssetID(id);
 					getChildView("combobox alphamode")->setEnabled(editable && mIsAlpha && transparency <= 0.f && !has_pbr_material);
 					getChildView("label alphamode")->setEnabled(editable && mIsAlpha && !has_pbr_material);
@@ -1185,14 +1187,14 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
 			if (shinytexture_ctrl)
 			{
 				shinytexture_ctrl->setTentative( !identical_spec );
-				shinytexture_ctrl->setEnabled( editable );
+				shinytexture_ctrl->setEnabled( editable && !has_pbr_material);
 				shinytexture_ctrl->setImageAssetID( specmap_id );
 			}
 
 			if (bumpytexture_ctrl)
 			{
 				bumpytexture_ctrl->setTentative( !identical_norm );
-				bumpytexture_ctrl->setEnabled( editable );
+				bumpytexture_ctrl->setEnabled( editable && !has_pbr_material);
 				bumpytexture_ctrl->setImageAssetID( normmap_id );
 			}
 		}
@@ -1499,7 +1501,7 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
 			LLSelectedTE::getFullbright(fullbright_flag,identical_fullbright);
 
 			getChild<LLUICtrl>("checkbox fullbright")->setValue((S32)(fullbright_flag != 0));
-			getChildView("checkbox fullbright")->setEnabled(editable);
+			getChildView("checkbox fullbright")->setEnabled(editable && !has_pbr_material);
 			getChild<LLUICtrl>("checkbox fullbright")->setTentative(!identical_fullbright);
 		}
 		
@@ -1749,8 +1751,7 @@ void LLPanelFace::updateUI(bool force_set_values /*false*/)
 		getChildView("button align")->setEnabled(FALSE);
         getChildView("pbr_from_inventory")->setEnabled(FALSE);
         getChildView("edit_selected_pbr")->setEnabled(FALSE);
-		//getChildView("has media")->setEnabled(FALSE);
-		//getChildView("media info set")->setEnabled(FALSE);
+        getChildView("save_selected_pbr")->setEnabled(FALSE);
 		
 		updateVisibility();
 
@@ -2658,11 +2659,11 @@ void LLPanelFace::updateVisibility()
 	{
 		updateShinyControls();
 	}
-	getChildView("shinyScaleU")->setVisible(show_shininess || show_pbr_normal);
-	getChildView("shinyScaleV")->setVisible(show_shininess || show_pbr_normal);
-	getChildView("shinyRot")->setVisible(show_shininess || show_pbr_normal);
-	getChildView("shinyOffsetU")->setVisible(show_shininess || show_pbr_normal);
-	getChildView("shinyOffsetV")->setVisible(show_shininess || show_pbr_normal);
+	getChildView("shinyScaleU")->setVisible(show_shininess || show_pbr_metallic);
+	getChildView("shinyScaleV")->setVisible(show_shininess || show_pbr_metallic);
+	getChildView("shinyRot")->setVisible(show_shininess || show_pbr_metallic);
+	getChildView("shinyOffsetU")->setVisible(show_shininess || show_pbr_metallic);
+	getChildView("shinyOffsetV")->setVisible(show_shininess || show_pbr_metallic);
 
 	// Normal map controls
 	if (show_bumpiness)
@@ -2672,16 +2673,17 @@ void LLPanelFace::updateVisibility()
 	getChildView("bumpytexture control")->setVisible(show_bumpiness);
 	getChildView("combobox bumpiness")->setVisible(show_bumpiness);
 	getChildView("label bumpiness")->setVisible(show_bumpiness);
-	getChildView("bumpyScaleU")->setVisible(show_bumpiness || show_pbr_metallic);
-	getChildView("bumpyScaleV")->setVisible(show_bumpiness || show_pbr_metallic);
-	getChildView("bumpyRot")->setVisible(show_bumpiness || show_pbr_metallic);
-	getChildView("bumpyOffsetU")->setVisible(show_bumpiness || show_pbr_metallic);
-	getChildView("bumpyOffsetV")->setVisible(show_bumpiness || show_pbr_metallic);
+	getChildView("bumpyScaleU")->setVisible(show_bumpiness || show_pbr_normal);
+	getChildView("bumpyScaleV")->setVisible(show_bumpiness || show_pbr_normal);
+	getChildView("bumpyRot")->setVisible(show_bumpiness || show_pbr_normal);
+	getChildView("bumpyOffsetU")->setVisible(show_bumpiness || show_pbr_normal);
+	getChildView("bumpyOffsetV")->setVisible(show_bumpiness || show_pbr_normal);
 
     // PBR controls
     getChildView("pbr_control")->setVisible(show_pbr);
     getChildView("pbr_from_inventory")->setVisible(show_pbr);
     getChildView("edit_selected_pbr")->setVisible(show_pbr);
+    getChildView("save_selected_pbr")->setVisible(show_pbr);
 }
 
 // static
@@ -3669,6 +3671,11 @@ void LLPanelFace::onClickBtnEditPBR(void* userdata)
     LLMaterialEditor::loadLive();
 }
 
+void LLPanelFace::onClickBtnSavePBR(void* userdata)
+{
+    LLMaterialEditor::saveObjectsMaterialAs();
+}
+
 enum EPasteMode
 {
     PASTE_COLOR,
@@ -3709,6 +3716,7 @@ struct LLPanelFaceUpdateFunctor : public LLSelectedObjectFunctor
     {
         if (mUpdatePbr)
         {
+            // setRenderMaterialId is supposed to create it
             LLRenderMaterialParams* param_block = (LLRenderMaterialParams*)object->getParameterEntry(LLNetworkData::PARAMS_RENDER_MATERIAL);
             if (param_block)
             {
@@ -3716,9 +3724,13 @@ struct LLPanelFaceUpdateFunctor : public LLSelectedObjectFunctor
                 {
                     object->setHasRenderMaterialParams(false);
                 }
-                else
+                else if (object->hasRenderMaterialParams())
                 {
                     object->parameterChanged(LLNetworkData::PARAMS_RENDER_MATERIAL, true);
+                }
+                else
+                {
+                    object->setHasRenderMaterialParams(true);
                 }
             }
         }
@@ -3977,6 +3989,10 @@ void LLPanelFace::onCopyTexture()
                 te_data["te"]["bumpshiny"] = tep->getBumpShiny();
                 te_data["te"]["bumpfullbright"] = tep->getBumpShinyFullbright();
                 te_data["te"]["pbr"] = objectp->getRenderMaterialID(te);
+                if (tep->getGLTFMaterialOverride() != nullptr)
+                {
+                    te_data["te"]["pbr_override"] = tep->getGLTFMaterialOverride()->asJSON();
+                }
 
                 if (te_data["te"].has("imageid"))
                 {
@@ -4233,6 +4249,8 @@ void LLPanelFace::onPasteTexture()
     LLPanelFaceUpdateFunctor sendfunc(true, true);
     selected_objects->applyToObjects(&sendfunc);
 
+    LLGLTFMaterialList::flushUpdates();
+
     LLPanelFaceNavigateHomeFunctor navigate_home_func;
     selected_objects->applyToTEs(&navigate_home_func);
 }
@@ -4364,13 +4382,37 @@ void LLPanelFace::onPasteTexture(LLViewerObject* objectp, S32 te)
             {
                 objectp->setTEBumpShinyFullbright(te, (U8)te_data["te"]["bumpfullbright"].asInteger());
             }
+            // PBR/GLTF
             if (te_data["te"].has("pbr"))
             {
-                objectp->setRenderMaterialID(te, te_data["te"]["pbr"].asUUID(), false);
+                objectp->setRenderMaterialID(te, te_data["te"]["pbr"].asUUID(), false /*managing our own update*/);
+                tep->setGLTFRenderMaterial(nullptr);
+                tep->setGLTFMaterialOverride(nullptr);
+
+                LLSD override_data;
+                override_data["object_id"] = objectp->getID();
+                override_data["side"] = te;
+                if (te_data["te"].has("pbr_override"))
+                {
+                    override_data["gltf_json"] = te_data["te"]["pbr_override"];
+                }
+                else
+                {
+                    override_data["gltf_json"] = "";
+                }
+
+                override_data["asset_id"] = te_data["te"]["pbr"].asUUID();
+
+                LLGLTFMaterialList::queueUpdate(override_data);
             }
             else
             {
-                objectp->setRenderMaterialID(te, LLUUID::null, false);
+                objectp->setRenderMaterialID(te, LLUUID::null, false /*send in bulk later*/ );
+                tep->setGLTFRenderMaterial(nullptr);
+                tep->setGLTFMaterialOverride(nullptr);
+
+                // blank out any override data on the server
+                LLGLTFMaterialList::queueApply(objectp->getID(), te, LLUUID::null);
             }
 
             // Texture map
