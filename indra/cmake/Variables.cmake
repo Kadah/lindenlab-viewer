@@ -177,12 +177,14 @@ if (${CMAKE_SYSTEM_NAME} MATCHES "Darwin")
   message(STATUS "CMAKE_XCODE_ATTRIBUTE_GCC_OPTIMIZATION_LEVEL = '${CMAKE_XCODE_ATTRIBUTE_GCC_OPTIMIZATION_LEVEL}'")
 
   string(REGEX MATCHALL "[^ ]+" LL_BUILD_LIST "$ENV{LL_BUILD}")
-  list(FIND LL_BUILD_LIST "-iwithsysroot" sysroot_idx)
-  if ("${sysroot_idx}" LESS 0)
-    message(FATAL_ERROR "Environment variable LL_BUILD must contain '-iwithsysroot'")
-  endif ()
-  math(EXPR sysroot_idx "${sysroot_idx} + 1")
-  list(GET LL_BUILD_LIST "${sysroot_idx}" CMAKE_OSX_SYSROOT)
+  #list(FIND LL_BUILD_LIST "-iwithsysroot" sysroot_idx)
+  # let cmake and xcode negotiate osx sysroot between themselves so we can support switching between multiple installed xcode
+  # versions
+  #if ("${sysroot_idx}" LESS 0)
+  #  message(FATAL_ERROR "Environment variable LL_BUILD must contain '-iwithsysroot'")
+  #endif ()
+  #math(EXPR sysroot_idx "${sysroot_idx} + 1")
+  #list(GET LL_BUILD_LIST "${sysroot_idx}" CMAKE_OSX_SYSROOT)
   message(STATUS "CMAKE_OSX_SYSROOT = '${CMAKE_OSX_SYSROOT}'")
 
   set(CMAKE_XCODE_ATTRIBUTE_GCC_VERSION "com.apple.compilers.llvm.clang.1_0")
